@@ -12,7 +12,7 @@ This project consists of two main components:
 
 - Node.js 18 or higher
 - npm or yarn
-- SQL Server Express (optional, defaults to SQLite)
+- SQL Server
 
 ## Quick Start
 
@@ -56,7 +56,7 @@ This project consists of two main components:
 - ✅ Post-import configuration script execution
 - ✅ Cross-platform desktop UI
 - ✅ TypeScript throughout the stack
-- ✅ Local SQLite or SQL Server Express target options
+- ✅ Local SQL Server
 
 ## Development
 

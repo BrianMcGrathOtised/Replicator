@@ -6,6 +6,7 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { replicationRoutes } from './routes/replication';
 import { healthRoutes } from './routes/health';
+import storageRoutes from './routes/storage';
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/health', healthRoutes);
 app.use('/api/replication', replicationRoutes);
+app.use('/api/storage', storageRoutes);
 
 // Error handling
 app.use(errorHandler);

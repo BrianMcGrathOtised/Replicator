@@ -1,11 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import Joi from 'joi';
 import { logger } from '../utils/logger';
 import { CustomError } from '../middleware/errorHandler';
 import { ReplicationService } from '../services/ReplicationService';
-import { validateConnectionString } from '../utils/validation';
+import { validateConnectionString, validateRequest } from '../utils/validation';
 
 const router = Router();
 const replicationService = new ReplicationService();
+
+// Validation schemas
+const storedReplicationSchema = Joi.object({
+  configId: Joi.string().uuid().required()
+});
 
 // Test connection endpoint
 router.post('/test-connection', async (req: Request, res: Response, next: NextFunction) => {
@@ -26,6 +32,27 @@ router.post('/test-connection', async (req: Request, res: Response, next: NextFu
     res.json({
       success: true,
       message: 'Connection test successful',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Test stored connection endpoint
+router.post('/test-stored-connection/:connectionId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { connectionId } = req.params;
+    
+    if (!connectionId) {
+      throw new CustomError('Connection ID is required', 400);
+    }
+
+    const result = await replicationService.testStoredConnection(connectionId);
+    
+    res.json({
+      success: true,
+      message: 'Stored connection test successful',
       data: result
     });
   } catch (error) {
@@ -56,6 +83,23 @@ router.post('/start', async (req: Request, res: Response, next: NextFunction) =>
     res.json({
       success: true,
       message: 'Replication started',
+      data: { jobId }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Start replication from stored configuration
+router.post('/start-stored', validateRequest(storedReplicationSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { configId } = req.body;
+    
+    const jobId = await replicationService.startStoredReplication({ configId });
+    
+    res.json({
+      success: true,
+      message: 'Stored replication started',
       data: { jobId }
     });
   } catch (error) {

@@ -1,8 +1,23 @@
 import Joi from 'joi';
+import { Request, Response, NextFunction } from 'express';
+import { CustomError } from '../middleware/errorHandler';
 
 export interface ValidationResult {
   isValid: boolean;
   error?: string;
+}
+
+export function validateRequest(schema: Joi.ObjectSchema) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const { error } = schema.validate(req.body);
+    
+    if (error) {
+      const errorMessage = error.details.map(detail => detail.message).join(', ');
+      return next(new CustomError(`Validation error: ${errorMessage}`, 400));
+    }
+    
+    next();
+  };
 }
 
 export function validateConnectionString(connectionString: string): ValidationResult {

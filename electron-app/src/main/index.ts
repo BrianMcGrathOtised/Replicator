@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import * as path from 'path';
 // Simple development detection
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -20,6 +20,9 @@ class DataReplicatorApp {
   private initializeApp(): void {
     // Handle app ready
     app.whenReady().then(() => {
+      // Remove default menu bar
+      Menu.setApplicationMenu(null);
+      
       this.createMainWindow();
       this.startBackendServer();
       this.setupIpcHandlers();
