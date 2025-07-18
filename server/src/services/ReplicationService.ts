@@ -7,8 +7,18 @@ import { secureStorageService } from './SecureStorageService';
 
 export interface ReplicationConfig {
   connectionString: string;
-  targetType: 'sqlite' | 'sqlserver';
+  target: {
+    targetType: 'sqlserver';
+    connectionString: string; // Target SQL Server connection
+    overwriteExisting?: boolean;
+    backupBefore?: boolean;
+    createNewDatabase?: boolean;
+  };
   configScripts: string[];
+  settings?: {
+    includeData?: boolean;
+    includeSchema?: boolean;
+  };
 }
 
 // Extended interface for stored replication configs
@@ -357,10 +367,32 @@ Original error: ${errorMessage}`;
       }
       
       // Build replication config
+      const targetConfig: any = {
+        targetType: target.targetType,
+        createNewDatabase: storedConfig.settings.includeSchema !== false
+      };
+      
+      if (target.configuration.filePath) {
+        targetConfig.filePath = target.configuration.filePath;
+      }
+      
+      if (target.configuration.connectionId) {
+        targetConfig.connectionString = await secureStorageService.getConnectionString(target.configuration.connectionId);
+      }
+      
+      if (target.configuration.overwriteExisting !== undefined) {
+        targetConfig.overwriteExisting = target.configuration.overwriteExisting;
+      }
+      
+      if (target.configuration.backupBefore !== undefined) {
+        targetConfig.backupBefore = target.configuration.backupBefore;
+      }
+
       const replicationConfig: ReplicationConfig = {
         connectionString,
-        targetType: target.targetType,
-        configScripts
+        target: targetConfig,
+        configScripts,
+        settings: storedConfig.settings
       };
       
       const jobId = uuidv4();
@@ -436,45 +468,47 @@ Original error: ${errorMessage}`;
       await sourcePool.connect();
       
       status.progress = 10;
-      status.message = 'Getting database schema';
+      status.message = 'Creating BACPAC export';
       
-      // Get schema information
-      const tables = await this.getTableSchema(sourcePool);
-      
-      status.progress = 20;
-      status.message = 'Creating local database';
-      
-      // Create local database
-      const localDb = await this.createLocalDatabase(config.targetType);
-      
-      status.progress = 30;
-      status.message = 'Replicating schema';
-      
-      // Replicate schema
-      await this.replicateSchema(sourcePool, localDb, tables);
+      // Create BACPAC file from source database
+      const bacpacPath = await this.createBacpac(sourcePool, config, status);
       
       status.progress = 60;
-      status.message = 'Replicating data';
+      status.message = 'Setting up target database';
       
-      // Replicate data
-      await this.replicateData(sourcePool, localDb, tables);
+      // Setup target database (create if needed, update connection string if database name changes)
+      const finalDatabaseName = await this.setupTargetDatabase(config.target);
       
-      status.progress = 80;
+      status.progress = 70;
+      status.message = `Importing BACPAC to target database: ${finalDatabaseName}`;
+      
+      // Import BACPAC to target
+      await this.importBacpac(bacpacPath, config.target, status);
+      
+      status.progress = 90;
       status.message = 'Executing configuration scripts';
       
-      // Execute configuration scripts
-      await this.executeConfigScripts(localDb, config.configScripts);
+      // Execute configuration scripts if any
+      if (config.configScripts && config.configScripts.length > 0) {
+        await this.executeConfigScripts(config.target, config.configScripts);
+      }
+      
+      status.progress = 95;
+      status.message = 'Cleaning up temporary files';
+      
+      // Clean up BACPAC file
+      await this.cleanupBacpac(bacpacPath);
       
       status.progress = 100;
       status.status = 'completed';
-      status.message = 'Replication completed successfully';
+      status.message = 'Database replication completed successfully';
       status.endTime = new Date();
       
-      logger.info('Replication completed', { jobId });
+      logger.info('BACPAC-based replication completed', { jobId, bacpacPath });
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Replication execution failed', { jobId, error: errorMessage });
+      logger.error('BACPAC replication execution failed', { jobId, error: errorMessage });
       throw error;
     } finally {
       if (sourcePool) {
@@ -483,25 +517,292 @@ Original error: ${errorMessage}`;
     }
   }
 
-  private async getTableSchema(pool: mssql.ConnectionPool): Promise<any[]> {
-    // TODO: Implement schema extraction
-    return [];
+  private async createBacpac(sourcePool: mssql.ConnectionPool, config: ReplicationConfig, status: ReplicationStatus): Promise<string> {
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const fs = require('fs').promises;
+
+    try {
+      // Extract database name from connection string (supports both Database= and Initial Catalog=)
+      logger.info('Parsing connection string for database name', { 
+        connectionString: config.connectionString.replace(/password=[^;]*/i, 'password=***') 
+      });
+      
+      const dbNameMatch = config.connectionString.match(/(?:database|initial catalog)=([^;]+)/i);
+      if (!dbNameMatch) {
+        throw new Error('Could not extract database name from connection string. Expected "Database=" or "Initial Catalog=" parameter.');
+      }
+      
+      const databaseName = dbNameMatch[1];
+      logger.info('Extracted database name', { databaseName });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const bacpacFileName = `${databaseName}_${timestamp}.bacpac`;
+      const bacpacPath = path.join(process.cwd(), 'temp', bacpacFileName);
+      
+      // Ensure temp directory exists
+      const tempDir = path.dirname(bacpacPath);
+      try {
+        await fs.access(tempDir);
+      } catch {
+        await fs.mkdir(tempDir, { recursive: true });
+      }
+
+      logger.info('Starting BACPAC export', { databaseName, bacpacPath });
+
+      // Build sqlpackage command for export
+      const sqlpackageArgs = [
+        '/Action:Export',
+        `/SourceConnectionString:${config.connectionString}`,
+        `/TargetFile:${bacpacPath}`,
+        '/OverwriteFiles:True',
+        '/Quiet:True'
+      ];
+
+      return new Promise((resolve, reject) => {
+        const sqlpackage = spawn('sqlpackage', sqlpackageArgs, {
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        sqlpackage.stdout.on('data', (data: any) => {
+          stdout += data.toString();
+          // Update progress based on output if possible
+          if (stdout.includes('Extracting schema')) {
+            status.progress = 20;
+            status.message = 'Extracting database schema';
+          } else if (stdout.includes('Extracting data')) {
+            status.progress = 40;
+            status.message = 'Extracting database data';
+          }
+        });
+
+        sqlpackage.stderr.on('data', (data: any) => {
+          stderr += data.toString();
+        });
+
+        sqlpackage.on('close', (code: number) => {
+          if (code === 0) {
+            logger.info('BACPAC export completed successfully', { bacpacPath });
+            resolve(bacpacPath);
+          } else {
+            logger.error('BACPAC export failed', { code, stderr, stdout });
+            reject(new Error(`BACPAC export failed: ${stderr || stdout || `Exit code ${code}`}`));
+          }
+        });
+
+        sqlpackage.on('error', (error: Error) => {
+          logger.error('Failed to start sqlpackage process', { error: error.message });
+          reject(new Error(`Failed to start sqlpackage: ${error.message}. Make sure SQL Server tools are installed.`));
+        });
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('BACPAC creation failed', { error: errorMessage });
+      throw new Error(`BACPAC creation failed: ${errorMessage}`);
+    }
   }
 
-  private async createLocalDatabase(targetType: string): Promise<any> {
-    // TODO: Implement local database creation
-    return {};
+  private async setupTargetDatabase(targetConfig: any): Promise<string> {
+    try {
+      // Only SQL Server targets are supported for BACPAC replication
+      if (targetConfig.targetType !== 'sqlserver') {
+        throw new Error('Only SQL Server targets are supported for BACPAC replication');
+      }
+
+      const dbNameMatch = targetConfig.connectionString.match(/(?:database|initial catalog)=([^;]+)/i);
+      if (!dbNameMatch) {
+        throw new Error('Could not extract database name from connection string');
+      }
+
+      const originalDbName = dbNameMatch[1];
+      let finalDbName = originalDbName;
+      
+      // Switch to master to manage databases
+      const masterConnString = targetConfig.connectionString.replace(/(?:database|initial catalog)=[^;]+/i, 'Initial Catalog=master');
+      const masterPool = new mssql.ConnectionPool(masterConnString);
+      await masterPool.connect();
+      
+      try {
+        // Check if original database exists and has user objects
+        const checkDbQuery = `SELECT database_id FROM sys.databases WHERE name = @dbName`;
+        const checkResult = await masterPool.request()
+          .input('dbName', mssql.NVarChar, originalDbName)
+          .query(checkDbQuery);
+
+        if (checkResult.recordset.length > 0) {
+          // Database exists, check if it has user objects
+          const checkTablesQuery = `
+            SELECT COUNT(*) as tableCount 
+            FROM [${originalDbName}].INFORMATION_SCHEMA.TABLES 
+            WHERE TABLE_TYPE = 'BASE TABLE'
+          `;
+          
+          try {
+            const tablesResult = await masterPool.request().query(checkTablesQuery);
+            const hasUserObjects = tablesResult.recordset[0].tableCount > 0;
+
+            if (hasUserObjects) {
+              // Create new database with timestamp suffix
+              const timestamp = new Date().toISOString()
+                .replace(/[-:]/g, '')
+                .replace(/\..+/, '')
+                .substring(0, 14); // YYYYMMDDHHMMSS
+              
+              finalDbName = `${originalDbName}_${timestamp}`;
+              logger.info('Database exists with user objects, creating new database with timestamp', { 
+                originalDatabase: originalDbName, 
+                newDatabase: finalDbName 
+              });
+            } else {
+              logger.info('Database exists but is empty, will use existing database', { databaseName: originalDbName });
+            }
+          } catch (error) {
+            // If we can't check tables (maybe permission issues), create new database with timestamp anyway
+            const timestamp = new Date().toISOString()
+              .replace(/[-:]/g, '')
+              .replace(/\..+/, '')
+              .substring(0, 14);
+            
+            finalDbName = `${originalDbName}_${timestamp}`;
+            logger.warn('Could not check existing database contents, creating new database with timestamp', { 
+              originalDatabase: originalDbName, 
+              newDatabase: finalDbName,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        } else if (targetConfig.createNewDatabase) {
+          logger.info('Database does not exist, will create new database', { databaseName: originalDbName });
+        }
+
+        // Create the database if it doesn't exist (either original name or timestamped name)
+        if (finalDbName !== originalDbName || checkResult.recordset.length === 0) {
+          const createDbQuery = `CREATE DATABASE [${finalDbName}]`;
+          await masterPool.request().query(createDbQuery);
+          logger.info('Created target database', { databaseName: finalDbName });
+        }
+
+        // Update the connection string to use the final database name
+        const updatedConnectionString = targetConfig.connectionString.replace(
+          /(?:database|initial catalog)=[^;]+/i, 
+          `Initial Catalog=${finalDbName}`
+        );
+        targetConfig.connectionString = updatedConnectionString;
+
+      } finally {
+        await masterPool.close();
+      }
+      
+      logger.info('Target SQL Server database setup completed', { finalDatabaseName: finalDbName });
+      return finalDbName;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Target database setup failed: ${errorMessage}`);
+    }
   }
 
-  private async replicateSchema(sourcePool: mssql.ConnectionPool, localDb: any, tables: any[]): Promise<void> {
-    // TODO: Implement schema replication
+  private async importBacpac(bacpacPath: string, targetConfig: any, status: ReplicationStatus): Promise<void> {
+    try {
+      // Only SQL Server targets are supported
+      if (targetConfig.targetType !== 'sqlserver') {
+        throw new Error('Only SQL Server targets are supported for BACPAC import');
+      }
+      
+      await this.importBacpacToSqlServer(bacpacPath, targetConfig, status);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('BACPAC import failed', { error: errorMessage, bacpacPath });
+      throw new Error(`BACPAC import failed: ${errorMessage}`);
+    }
   }
 
-  private async replicateData(sourcePool: mssql.ConnectionPool, localDb: any, tables: any[]): Promise<void> {
-    // TODO: Implement data replication
+  private async importBacpacToSqlServer(bacpacPath: string, targetConfig: any, status: ReplicationStatus): Promise<void> {
+    const { spawn } = require('child_process');
+
+    return new Promise((resolve, reject) => {
+      const sqlpackageArgs = [
+        '/Action:Import',
+        `/SourceFile:${bacpacPath}`,
+        `/TargetConnectionString:${targetConfig.connectionString}`,
+        '/Quiet:True'
+      ];
+
+      logger.info('Starting BACPAC import to SQL Server', { bacpacPath, target: 'SQL Server' });
+
+      const sqlpackage = spawn('sqlpackage', sqlpackageArgs, {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      sqlpackage.stdout.on('data', (data: any) => {
+        stdout += data.toString();
+        if (stdout.includes('Importing')) {
+          status.progress = 80;
+          status.message = 'Importing data to SQL Server';
+        }
+      });
+
+      sqlpackage.stderr.on('data', (data: any) => {
+        stderr += data.toString();
+      });
+
+      sqlpackage.on('close', (code: number) => {
+        if (code === 0) {
+          logger.info('BACPAC import to SQL Server completed successfully');
+          resolve();
+        } else {
+          logger.error('BACPAC import to SQL Server failed', { code, stderr, stdout });
+          reject(new Error(`BACPAC import failed: ${stderr || stdout || `Exit code ${code}`}`));
+        }
+      });
+
+      sqlpackage.on('error', (error: Error) => {
+        reject(new Error(`Failed to start sqlpackage for import: ${error.message}`));
+      });
+    });
   }
 
-  private async executeConfigScripts(localDb: any, scripts: string[]): Promise<void> {
-    // TODO: Implement script execution
+
+
+  private async cleanupBacpac(bacpacPath: string): Promise<void> {
+    const fs = require('fs').promises;
+    
+    try {
+      await fs.unlink(bacpacPath);
+      logger.info('Cleaned up BACPAC file', { bacpacPath });
+    } catch (error) {
+      // Don't fail the entire operation if cleanup fails
+      logger.warn('Failed to cleanup BACPAC file', { bacpacPath, error: (error as Error).message });
+    }
+  }
+
+  private async executeConfigScripts(targetConfig: any, scripts: string[]): Promise<void> {
+    if (!scripts || scripts.length === 0) {
+      return;
+    }
+
+    logger.info('Executing configuration scripts', { scriptCount: scripts.length });
+    
+    // Only SQL Server targets are supported
+    if (targetConfig.targetType !== 'sqlserver') {
+      throw new Error('Configuration script execution is only supported for SQL Server targets');
+    }
+
+    const targetPool = new mssql.ConnectionPool(targetConfig.connectionString);
+    await targetPool.connect();
+    
+    try {
+      for (const script of scripts) {
+        logger.info('Executing configuration script', { script });
+        await targetPool.request().query(script);
+      }
+    } finally {
+      await targetPool.close();
+    }
+    
+    logger.info('Configuration scripts executed successfully');
   }
 } 

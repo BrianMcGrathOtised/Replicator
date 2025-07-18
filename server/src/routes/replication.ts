@@ -3,7 +3,7 @@ import Joi from 'joi';
 import { logger } from '../utils/logger';
 import { CustomError } from '../middleware/errorHandler';
 import { ReplicationService } from '../services/ReplicationService';
-import { validateConnectionString, validateRequest } from '../utils/validation';
+import { validateConnectionString, validateRequest, validateReplicationConfig } from '../utils/validation';
 
 const router = Router();
 const replicationService = new ReplicationService();
@@ -63,10 +63,14 @@ router.post('/test-stored-connection/:connectionId', async (req: Request, res: R
 // Start replication endpoint
 router.post('/start', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { connectionString, targetType = 'sqlite', configScripts = [] } = req.body;
+    const { connectionString, target, configScripts = [], settings = {} } = req.body;
     
     if (!connectionString) {
       throw new CustomError('Connection string is required', 400);
+    }
+
+    if (!target || !target.targetType) {
+      throw new CustomError('Target configuration is required', 400);
     }
 
     const validation = validateConnectionString(connectionString);
@@ -74,10 +78,17 @@ router.post('/start', async (req: Request, res: Response, next: NextFunction) =>
       throw new CustomError(validation.error || 'Invalid connection string', 400);
     }
 
+    // Validate the complete replication config
+    const configValidation = validateReplicationConfig({ connectionString, target, configScripts, settings });
+    if (!configValidation.isValid) {
+      throw new CustomError(configValidation.error || 'Invalid replication configuration', 400);
+    }
+
     const jobId = await replicationService.startReplication({
       connectionString,
-      targetType,
-      configScripts
+      target,
+      configScripts,
+      settings
     });
     
     res.json({

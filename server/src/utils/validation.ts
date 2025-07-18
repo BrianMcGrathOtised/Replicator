@@ -56,8 +56,18 @@ export function validateConnectionString(connectionString: string): ValidationRe
 
 export const replicationConfigSchema = Joi.object({
   connectionString: Joi.string().required(),
-  targetType: Joi.string().valid('sqlite', 'sqlserver').default('sqlite'),
-  configScripts: Joi.array().items(Joi.string()).default([])
+  target: Joi.object({
+    targetType: Joi.string().valid('sqlserver').required(),
+    connectionString: Joi.string().required(),
+    overwriteExisting: Joi.boolean().optional(),
+    backupBefore: Joi.boolean().optional(),
+    createNewDatabase: Joi.boolean().optional()
+  }).required(),
+  configScripts: Joi.array().items(Joi.string()).default([]),
+  settings: Joi.object({
+    includeData: Joi.boolean().optional(),
+    includeSchema: Joi.boolean().optional()
+  }).optional()
 });
 
 export function validateReplicationConfig(config: any): ValidationResult {
