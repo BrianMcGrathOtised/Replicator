@@ -46,6 +46,12 @@ export class SecureStorageService {
         // Convert date strings back to Date objects
         this.convertDatesFromStorage(parsedData);
         
+        // Migrate legacy connection string format if needed
+        const migrated = this.migrateLegacyConnections(parsedData);
+        if (migrated) {
+          logger.info('Migrated legacy connection format to new structure');
+        }
+        
         logger.info('Loaded storage data', { 
           connections: parsedData.connections.length,
           scripts: parsedData.scripts.length,
@@ -116,11 +122,101 @@ export class SecureStorageService {
     });
   }
 
-  private extractConnectionInfo(connectionString: string): { serverName?: string; databaseName?: string } {
+  private buildConnectionString(config: {
+    server: string;
+    username: string;
+    password: string;
+    database: string;
+    port?: number;
+    serverType: 'sqlserver' | 'azure-sql';
+  }): string {
+    const parts: string[] = [];
+    
+    // Server with optional port
+    if (config.port) {
+      parts.push(`Server=${config.server},${config.port}`);
+    } else {
+      parts.push(`Server=${config.server}`);
+    }
+    
+    // Database
+    parts.push(`Database=${config.database}`);
+    
+    // Authentication
+    parts.push(`User Id=${config.username}`);
+    parts.push(`Password=${config.password}`);
+    
+    // Connection settings based on server type
+    if (config.serverType === 'azure-sql') {
+      parts.push('Encrypt=True');
+      parts.push('TrustServerCertificate=False');
+      parts.push('Connection Timeout=30');
+    } else {
+      // SQL Server on-premises defaults
+      parts.push('Encrypt=False'); // Can be overridden if needed
+      parts.push('TrustServerCertificate=True');
+      parts.push('Connection Timeout=30');
+    }
+    
+    return parts.join(';');
+  }
+
+  private migrateLegacyConnections(data: any): boolean {
+    let migrated = false;
+    
+    if (data.connections && Array.isArray(data.connections)) {
+      for (const conn of data.connections) {
+        // Check if this is a legacy connection with connectionString
+        if (conn.connectionString && !conn.server) {
+          try {
+            // Decrypt the old connection string
+            const decryptedConnectionString = encryptionService.decrypt(conn.connectionString);
+            
+            // Parse the connection string to extract components
+            const components = this.parseConnectionStringForMigration(decryptedConnectionString);
+            
+            if (components.server && components.username && components.password && components.database) {
+              // Update the connection object with new structure
+              conn.server = encryptionService.encrypt(components.server);
+              conn.username = encryptionService.encrypt(components.username);
+              conn.password = encryptionService.encrypt(components.password);
+              conn.database = encryptionService.encrypt(components.database);
+              if (components.port) {
+                conn.port = components.port;
+              }
+              
+              // Remove the old connectionString field
+              delete conn.connectionString;
+              
+              migrated = true;
+              logger.info('Migrated legacy connection', { id: conn.id, name: conn.name });
+            }
+          } catch (error) {
+            logger.warn('Failed to migrate connection, keeping as-is', { id: conn.id, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+      }
+    }
+    
+    // Save if migrated
+    if (migrated) {
+      this.saveData(data);
+    }
+    
+    return migrated;
+  }
+
+  private parseConnectionStringForMigration(connectionString: string): {
+    server?: string;
+    username?: string;
+    password?: string;
+    database?: string;
+    port?: number;
+  } {
+    const result: any = {};
+    
     try {
       const pairs = connectionString.split(';').filter(pair => pair.trim());
-      let serverName: string | undefined;
-      let databaseName: string | undefined;
       
       for (const pair of pairs) {
         const [key, value] = pair.split('=').map(s => s.trim());
@@ -129,22 +225,34 @@ export class SecureStorageService {
         switch (key.toLowerCase()) {
           case 'server':
           case 'data source':
-            serverName = value;
+            // Handle server with port format like "server,port"
+            if (value.includes(',')) {
+              const [server, port] = value.split(',');
+              result.server = server.trim();
+              result.port = parseInt(port.trim(), 10);
+            } else {
+              result.server = value;
+            }
             break;
           case 'database':
           case 'initial catalog':
-            databaseName = value;
+            result.database = value;
+            break;
+          case 'user id':
+          case 'uid':
+            result.username = value;
+            break;
+          case 'password':
+          case 'pwd':
+            result.password = value;
             break;
         }
       }
-      
-      return { 
-        ...(serverName && { serverName }),
-        ...(databaseName && { databaseName })
-      };
-    } catch {
-      return {};
+    } catch (error) {
+      logger.warn('Failed to parse connection string for migration', { error: error instanceof Error ? error.message : String(error) });
     }
+    
+    return result;
   }
 
   // Connection management
@@ -153,14 +261,21 @@ export class SecureStorageService {
       const id = uuidv4();
       const now = new Date();
       
-      // Encrypt the connection string
-      const encryptedConnectionString = encryptionService.encrypt(request.connectionString);
+      // Encrypt the sensitive connection fields
+      const encryptedServer = encryptionService.encrypt(request.server);
+      const encryptedUsername = encryptionService.encrypt(request.username);
+      const encryptedPassword = encryptionService.encrypt(request.password);
+      const encryptedDatabase = encryptionService.encrypt(request.database);
       
       const connection: StoredConnection = {
         id,
         name: request.name,
         ...(request.description && { description: request.description }),
-        connectionString: encryptedConnectionString,
+        server: encryptedServer,
+        username: encryptedUsername,
+        password: encryptedPassword,
+        database: encryptedDatabase,
+        ...(request.port && { port: request.port }),
         serverType: request.serverType,
         createdAt: now,
         updatedAt: now
@@ -169,18 +284,17 @@ export class SecureStorageService {
       this.data.connections.push(connection);
       this.saveData();
       
-      // Extract server info for response
-      const { serverName, databaseName } = this.extractConnectionInfo(request.connectionString);
-      
-      logger.info('Connection created', { id, name: request.name });
+      logger.info('Connection created', { id, name: request.name, server: request.server });
       
       return {
         id,
         name: request.name,
         ...(request.description && { description: request.description }),
         serverType: request.serverType,
-        ...(serverName && { serverName }),
-        ...(databaseName && { databaseName }),
+        server: request.server,
+        username: request.username,
+        database: request.database,
+        ...(request.port && { port: request.port }),
         createdAt: now,
         updatedAt: now
       };
@@ -194,17 +308,20 @@ export class SecureStorageService {
   async getConnections(): Promise<ConnectionInfo[]> {
     try {
       return this.data.connections.map(conn => {
-        // Decrypt connection string to extract info
-        const decryptedConnectionString = encryptionService.decrypt(conn.connectionString);
-        const { serverName, databaseName } = this.extractConnectionInfo(decryptedConnectionString);
+        // Decrypt connection fields
+        const decryptedServer = encryptionService.decrypt(conn.server);
+        const decryptedUsername = encryptionService.decrypt(conn.username);
+        const decryptedDatabase = encryptionService.decrypt(conn.database);
         
         return {
           id: conn.id,
           name: conn.name,
           ...(conn.description && { description: conn.description }),
           serverType: conn.serverType,
-          ...(serverName && { serverName }),
-          ...(databaseName && { databaseName }),
+          server: decryptedServer,
+          username: decryptedUsername,
+          database: decryptedDatabase,
+          ...(conn.port && { port: conn.port }),
           createdAt: conn.createdAt,
           updatedAt: conn.updatedAt,
           ...(conn.lastUsed && { lastUsed: conn.lastUsed })
@@ -224,16 +341,19 @@ export class SecureStorageService {
     }
     
     try {
-      const decryptedConnectionString = encryptionService.decrypt(connection.connectionString);
-      const { serverName, databaseName } = this.extractConnectionInfo(decryptedConnectionString);
+      const decryptedServer = encryptionService.decrypt(connection.server);
+      const decryptedUsername = encryptionService.decrypt(connection.username);
+      const decryptedDatabase = encryptionService.decrypt(connection.database);
       
       return {
         id: connection.id,
         name: connection.name,
         ...(connection.description && { description: connection.description }),
         serverType: connection.serverType,
-        ...(serverName && { serverName }),
-        ...(databaseName && { databaseName }),
+        server: decryptedServer,
+        username: decryptedUsername,
+        database: decryptedDatabase,
+        ...(connection.port && { port: connection.port }),
         createdAt: connection.createdAt,
         updatedAt: connection.updatedAt,
         ...(connection.lastUsed && { lastUsed: connection.lastUsed })
@@ -252,16 +372,29 @@ export class SecureStorageService {
     }
     
     try {
-      const decryptedConnectionString = encryptionService.decrypt(connection.connectionString);
+      const decryptedServer = encryptionService.decrypt(connection.server);
+      const decryptedUsername = encryptionService.decrypt(connection.username);
+      const decryptedPassword = encryptionService.decrypt(connection.password);
+      const decryptedDatabase = encryptionService.decrypt(connection.database);
+      
+      // Build connection string from components
+      const connectionString = this.buildConnectionString({
+        server: decryptedServer,
+        username: decryptedUsername,
+        password: decryptedPassword,
+        database: decryptedDatabase,
+        ...(connection.port && { port: connection.port }),
+        serverType: connection.serverType
+      });
       
       // Update last used timestamp
       connection.lastUsed = new Date();
       this.saveData();
       
-      return decryptedConnectionString;
+      return connectionString;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to decrypt connection string', { error: errorMessage, id });
+      logger.error('Failed to build connection string', { error: errorMessage, id });
       throw new CustomError('Failed to retrieve connection string', 500);
     }
   }
@@ -277,16 +410,19 @@ export class SecureStorageService {
       if (request.name) connection.name = request.name;
       if (request.description !== undefined) connection.description = request.description;
       if (request.serverType) connection.serverType = request.serverType;
-      if (request.connectionString) {
-        connection.connectionString = encryptionService.encrypt(request.connectionString);
-      }
+      if (request.server) connection.server = encryptionService.encrypt(request.server);
+      if (request.username) connection.username = encryptionService.encrypt(request.username);
+      if (request.password) connection.password = encryptionService.encrypt(request.password);
+      if (request.database) connection.database = encryptionService.encrypt(request.database);
+      if (request.port !== undefined) connection.port = request.port;
       connection.updatedAt = new Date();
       
       this.saveData();
       
       // Get updated connection info
-      const decryptedConnectionString = encryptionService.decrypt(connection.connectionString);
-      const { serverName, databaseName } = this.extractConnectionInfo(decryptedConnectionString);
+      const decryptedServer = encryptionService.decrypt(connection.server);
+      const decryptedUsername = encryptionService.decrypt(connection.username);
+      const decryptedDatabase = encryptionService.decrypt(connection.database);
       
       logger.info('Connection updated', { id, name: connection.name });
       
@@ -295,8 +431,10 @@ export class SecureStorageService {
         name: connection.name,
         ...(connection.description && { description: connection.description }),
         serverType: connection.serverType,
-        ...(serverName && { serverName }),
-        ...(databaseName && { databaseName }),
+        server: decryptedServer,
+        username: decryptedUsername,
+        database: decryptedDatabase,
+        ...(connection.port && { port: connection.port }),
         createdAt: connection.createdAt,
         updatedAt: connection.updatedAt,
         ...(connection.lastUsed && { lastUsed: connection.lastUsed })
@@ -558,6 +696,57 @@ export class SecureStorageService {
       throw new CustomError('Replication config not found', 404);
     }
     return { ...config };
+  }
+
+  async updateReplicationConfig(id: string, request: CreateReplicationConfigRequest): Promise<StoredReplicationConfig> {
+    try {
+      const config = this.data.replicationConfigs.find(c => c.id === id);
+      if (!config) {
+        throw new CustomError('Replication config not found', 404);
+      }
+      
+      // Validate references if they changed
+      if (request.sourceConnectionId !== config.sourceConnectionId) {
+        const sourceConnection = this.data.connections.find(c => c.id === request.sourceConnectionId);
+        if (!sourceConnection) {
+          throw new CustomError('Source connection not found', 400);
+        }
+      }
+      
+      if (request.targetId !== config.targetId) {
+        const target = this.data.targets.find(t => t.id === request.targetId);
+        if (!target) {
+          throw new CustomError('Target not found', 400);
+        }
+      }
+      
+      for (const scriptId of request.configScriptIds) {
+        const script = this.data.scripts.find(s => s.id === scriptId);
+        if (!script) {
+          throw new CustomError(`Script with ID ${scriptId} not found`, 400);
+        }
+      }
+      
+      // Update the config
+      config.name = request.name;
+      if (request.description !== undefined) {
+        config.description = request.description;
+      }
+      config.sourceConnectionId = request.sourceConnectionId;
+      config.targetId = request.targetId;
+      config.configScriptIds = request.configScriptIds;
+      config.settings = request.settings;
+      config.updatedAt = new Date();
+      
+      this.saveData();
+      
+      logger.info('Replication config updated', { id, name: request.name });
+      return { ...config };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to update replication config', { error: errorMessage, id });
+      throw new CustomError('Failed to update replication config', 500);
+    }
   }
 
   async updateReplicationConfigLastRun(id: string): Promise<void> {

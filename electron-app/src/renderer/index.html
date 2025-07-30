@@ -10,27 +10,24 @@
     <div id="app">
         <header class="header">
             <h1>Data Replicator</h1>
-            <p>Replicate MS SQL Server and Azure SQL databases locally</p>
+            <p>Replicate databases using saved configurations</p>
         </header>
 
         <main class="main-content">
             <div class="content-layout">
                 <div class="left-panel">
-                    <!-- Storage Management Section -->
+                    <!-- Saved Items Management Section -->
                     <section class="section">
-                        <h2>Storage Management</h2>
+                        <h2>Saved Items</h2>
                         <div class="tab-container">
                             <div class="tab-buttons">
-                                <button class="tab-button active" data-tab="connections">Connections</button>
-                                <button class="tab-button" data-tab="scripts">Scripts</button>
-                                <button class="tab-button" data-tab="targets">Targets</button>
-                                <button class="tab-button" data-tab="configs">Configurations</button>
+                                <button class="tab-button active" data-tab="connections">Database Connections</button>
+                                <button class="tab-button" data-tab="scripts">SQL Scripts</button>
                             </div>
 
-                            <!-- Connections Tab -->
+                            <!-- Database Connections Tab -->
                             <div class="tab-content active" id="connections-tab">
                                 <div class="storage-header">
-                                    <h3>Saved Connections</h3>
                                     <button id="addConnectionBtn" class="btn btn-primary">Add Connection</button>
                                 </div>
                                 <div class="storage-list" id="connectionsList">
@@ -38,203 +35,81 @@
                                 </div>
                             </div>
 
-                            <!-- Scripts Tab -->
+                            <!-- SQL Scripts Tab -->
                             <div class="tab-content" id="scripts-tab">
                                 <div class="storage-header">
-                                    <h3>Configuration Scripts</h3>
-                                    <button id="addStoredScriptBtn" class="btn btn-primary">Add Script</button>
+                                    <button id="addScriptBtn" class="btn btn-primary">Add Script</button>
                                 </div>
-                                <div class="storage-list" id="storedScriptsList">
+                                <div class="storage-list" id="scriptsList">
                                     <div class="empty-state">No saved scripts</div>
-                                </div>
-                            </div>
-
-                            <!-- Targets Tab -->
-                            <div class="tab-content" id="targets-tab">
-                                <div class="storage-header">
-                                    <h3>Replication Targets</h3>
-                                    <button id="addTargetBtn" class="btn btn-primary">Add Target</button>
-                                </div>
-                                <div class="storage-list" id="targetsList">
-                                    <div class="empty-state">No saved targets</div>
-                                </div>
-                            </div>
-
-                            <!-- Configurations Tab -->
-                            <div class="tab-content" id="configs-tab">
-                                <div class="storage-header">
-                                    <h3>Replication Configurations</h3>
-                                    <button id="addConfigBtn" class="btn btn-primary">Add Configuration</button>
-                                </div>
-                                <div class="storage-list" id="configsList">
-                                    <div class="empty-state">No saved configurations</div>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-            <!-- Connection Section -->
-            <section class="section">
-                <h2>Database Connection</h2>
-                <div class="form-group">
-                    <label for="connectionString">Connection String:</label>
-                    <div class="connection-input-group">
-                        <textarea 
-                            id="connectionString" 
-                            placeholder="Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;"
-                            rows="3"
-                        ></textarea>
-                        <select id="savedConnectionSelect" class="saved-connection-select">
-                            <option value="">Use saved connection...</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button id="testConnectionBtn" class="btn btn-secondary">Test Connection</button>
-                    <button id="saveCurrentConnectionBtn" class="btn btn-secondary">Save Connection</button>
-                </div>
-            </section>
-
-            <!-- Configuration Section -->
-            <section class="section">
-                <h2>Replication Configuration</h2>
-                <div class="config-mode-selector">
-                    <label>
-                        <input type="radio" name="configMode" value="manual" checked> Manual Configuration
-                    </label>
-                    <label>
-                        <input type="radio" name="configMode" value="saved"> Use Saved Configuration
-                    </label>
-                </div>
-
-                <!-- Manual Configuration -->
-                <div id="manualConfig" class="config-section">
-                    <div class="form-group">
-                        <label for="targetType">Target Database Type:</label>
-                        <select id="targetType">
-                            <option value="sqlserver">SQL Server (BACPAC)</option>
-                        </select>
-                        <small>BACPAC provides complete database replication including all schema, data, and constraints.</small>
-                    </div>
-                    
-                    <!-- SQLite Target Configuration -->
-                    <div id="sqliteTarget" class="form-group">
-                        <label for="targetFilePath">SQLite Database File Path:</label>
-                        <div class="file-input-group">
-                            <input type="text" id="targetFilePath" placeholder="C:\path\to\database.sqlite" />
-                            <button id="selectFileBtn" class="btn btn-secondary">Browse</button>
+                    <!-- Configuration Management Section -->
+                    <section class="section">
+                        <h2>Replication Configurations</h2>
+                        <div class="storage-header">
+                            <button id="addConfigBtn" class="btn btn-primary">Create New Configuration</button>
                         </div>
-                        <small>Specify where to create the local SQLite database file</small>
-                    </div>
-                    
-                    <!-- SQL Server Target Configuration -->
-                    <div id="sqlserverTarget" class="form-group" style="display: none;">
-                        <label for="targetConnectionString">Target SQL Server Connection:</label>
-                        <div class="connection-input-group">
-                            <textarea 
-                                id="targetConnectionString" 
-                                placeholder="Server=localhost;Database=LocalCopy;Trusted_Connection=True;"
-                                rows="2"
-                            ></textarea>
-                            <select id="savedTargetConnectionSelect" class="saved-connection-select">
-                                <option value="">Use saved connection...</option>
+                        <div class="storage-list" id="configsList">
+                            <div class="empty-state">No configurations created yet</div>
+                        </div>
+                    </section>
+
+                    <!-- Run Configuration Section -->
+                    <section class="section">
+                        <h2>Run Replication</h2>
+                        <div class="form-group">
+                            <label for="selectedConfigSelect">Select Configuration to Run:</label>
+                            <select id="selectedConfigSelect">
+                                <option value="">Choose a configuration...</option>
                             </select>
                         </div>
-                        <small>Specify the target SQL Server database connection</small>
-                    </div>
-
-                    <!-- Replication Options -->
-                    <div class="form-group">
-                        <label>Replication Options:</label>
-                        <div class="checkbox-group">
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="overwriteExisting" checked>
-                                <label for="overwriteExisting">Overwrite existing data</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="backupBefore">
-                                <label for="backupBefore">Backup target before replication</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="createNewDatabase">
-                                <label for="createNewDatabase">Create new database if it doesn't exist</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="includeData" checked>
-                                <label for="includeData">Include table data</label>
-                            </div>
-                            <div class="checkbox-item">
-                                <input type="checkbox" id="includeSchema" checked>
-                                <label for="includeSchema">Include table schema</label>
+                        
+                        <div id="configDetails" class="config-details mb-2" style="display: none;">
+                            <h4>Configuration Details:</h4>
+                            <div class="config-info">
+                                <div class="info-item">
+                                    <label>Source Database:</label>
+                                    <span id="configSource">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Target Database:</label>
+                                    <span id="configTarget">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Post-Replication Scripts:</label>
+                                    <span id="configScripts">None</span>
+                                </div>
+                                <div class="info-item">
+                                    <label>Last Run:</label>
+                                    <span id="configLastRun">Never</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>Configuration Scripts:</label>
-                        <div class="script-list" id="scriptList">
-                            <p class="empty-state">No scripts added</p>
+
+                        <div class="form-actions">
+                            <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
+                            <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
                         </div>
-                        <button id="addScriptBtn" class="btn btn-secondary">Add Script</button>
-                    </div>
-                </div>
-
-                <!-- Saved Configuration -->
-                <div id="savedConfig" class="config-section" style="display: none;">
-                    <div class="form-group">
-                        <label for="savedConfigSelect">Select Configuration:</label>
-                        <select id="savedConfigSelect">
-                            <option value="">Choose a saved configuration...</option>
-                        </select>
-                    </div>
-                    <div id="selectedConfigDetails" class="config-details" style="display: none;">
-                        <h4>Configuration Details:</h4>
-                        <div class="config-info">
-                            <div class="info-item">
-                                <label>Source:</label>
-                                <span id="configSource">-</span>
+                        
+                        <!-- Progress Section -->
+                        <div class="progress-container" id="progressContainer" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
                             </div>
-                            <div class="info-item">
-                                <label>Target:</label>
-                                <span id="configTarget">-</span>
-                            </div>
-                            <div class="info-item">
-                                <label>Scripts:</label>
-                                <span id="configScripts">-</span>
-                            </div>
-                            <div class="info-item">
-                                <label>Last Run:</label>
-                                <span id="configLastRun">Never</span>
-                            </div>
+                            <div class="progress-text" id="progressText">0%</div>
+                            <div class="status-message" id="statusMessage">Ready</div>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Replication Section -->
-            <section class="section">
-                <h2>Replication Control</h2>
-                <div class="form-actions">
-                    <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
-                    <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
-                </div>
-                
-                <!-- Progress Section -->
-                <div class="progress-container" id="progressContainer" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
-                    </div>
-                    <div class="progress-text" id="progressText">0%</div>
-                    <div class="status-message" id="statusMessage">Ready</div>
-                </div>
-            </section>
-
+                    </section>
                 </div>
                 
                 <div class="right-panel">
                     <!-- Logs Section -->
                     <section class="logs-section">
-                        <h2>Logs</h2>
+                        <h2>Replication Logs</h2>
                         <div class="logs-container">
                             <div id="logs" class="logs"></div>
                             <div class="logs-actions">
@@ -248,8 +123,8 @@
 
         <!-- Status Bar -->
         <footer class="status-bar">
-            <span id="appInfo">Loading...</span>
-            <span id="connectionStatus" class="status-disconnected">Not Connected</span>
+            <span id="appInfo">Data Replicator v1.0</span>
+            <span id="connectionStatus" class="status-disconnected">Ready</span>
         </footer>
     </div>
 
@@ -259,19 +134,166 @@
         <p>Processing...</p>
     </div>
 
-    <!-- Modal for forms -->
-    <div id="modalOverlay" class="modal-overlay" style="display: none;">
+    <!-- Database Connection Modal -->
+    <div id="connectionModal" class="modal-overlay" style="display: none;">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="modalTitle">Add Item</h3>
-                <button id="modalCloseBtn" class="modal-close">&times;</button>
+                <h3 id="connectionModalTitle">Add Database Connection</h3>
+                <button id="connectionModalCloseBtn" class="modal-close">&times;</button>
             </div>
-            <div class="modal-body" id="modalBody">
-                <!-- Dynamic form content will be inserted here -->
+            <div class="modal-body">
+                <form id="connectionForm">
+                    <div class="form-group">
+                        <label for="connectionName">Connection Name:</label>
+                        <input type="text" id="connectionName" placeholder="e.g., Production Database" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="serverType">Server Type:</label>
+                        <select id="serverType" required>
+                            <option value="sqlserver">SQL Server (On-Premises)</option>
+                            <option value="azure-sql">Azure SQL Database</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="server">Server:</label>
+                        <input type="text" id="server" placeholder="e.g., localhost or server.database.windows.net" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="database">Database:</label>
+                        <input type="text" id="database" placeholder="e.g., MyDatabase" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" placeholder="e.g., sa or user@domain.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" placeholder="Database password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="port">Port (Optional):</label>
+                        <input type="number" id="port" placeholder="e.g., 1433" min="1" max="65535">
+                        <small>Leave empty to use default port</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" id="testConnectionBtn" class="btn btn-secondary">Test Connection</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="connectionDescription">Description (Optional):</label>
+                        <textarea 
+                            id="connectionDescription" 
+                            placeholder="Brief description of this connection"
+                            rows="2"
+                        ></textarea>
+                    </div>
+                    
+
+                </form>
             </div>
             <div class="modal-footer">
-                <button id="modalCancelBtn" class="btn btn-secondary">Cancel</button>
-                <button id="modalSaveBtn" class="btn btn-primary">Save</button>
+                <button id="connectionModalCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="connectionModalSaveBtn" class="btn btn-primary">Save Connection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SQL Script Modal -->
+    <div id="sqlScriptModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="sqlScriptModalTitle">Add SQL Script</h3>
+                <button id="sqlScriptModalCloseBtn" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="sqlScriptForm">
+                    <div class="form-group">
+                        <label for="sqlScriptName">Script Name:</label>
+                        <input type="text" id="sqlScriptName" placeholder="e.g., Set Environment Variables" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sqlScriptContent">SQL Script:</label>
+                        <textarea 
+                            id="sqlScriptContent" 
+                            placeholder="-- SQL commands to run after replication&#10;UPDATE Settings SET Environment = 'DEV';"
+                            rows="8"
+                            required
+                        ></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sqlScriptDescription">Description (Optional):</label>
+                        <textarea 
+                            id="sqlScriptDescription" 
+                            placeholder="Brief description of what this script does"
+                            rows="2"
+                        ></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button id="sqlScriptModalCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="sqlScriptModalSaveBtn" class="btn btn-primary">Save Script</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="configModalTitle">Create Configuration</h3>
+                <button id="configModalCloseBtn" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="configForm">
+                    <div class="form-group">
+                        <label for="configName">Configuration Name:</label>
+                        <input type="text" id="configName" placeholder="e.g., Production to Dev" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sourceConnection">Source Database:</label>
+                        <select id="sourceConnection" required>
+                            <option value="">Select saved connection...</option>
+                        </select>
+                        <small>Choose from your saved database connections</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="targetConnection">Target Database:</label>
+                        <select id="targetConnection" required>
+                            <option value="">Select saved connection...</option>
+                        </select>
+                        <small>Local SQL Server only (not Azure)</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="createTargetDatabase" checked>
+                            <label for="createTargetDatabase">Create target database if it doesn't exist</label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Post-Replication Scripts (Optional):</label>
+                        <div class="script-selection" id="scriptSelection">
+                            <!-- Scripts will be populated here -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button id="configModalCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="configModalSaveBtn" class="btn btn-primary">Save Configuration</button>
             </div>
         </div>
     </div>

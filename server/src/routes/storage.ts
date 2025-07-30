@@ -10,14 +10,22 @@ const router = Router();
 const createConnectionSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).optional(),
-  connectionString: Joi.string().min(1).required(),
+  server: Joi.string().min(1).required(),
+  username: Joi.string().min(1).required(),
+  password: Joi.string().min(1).required(),
+  database: Joi.string().min(1).required(),
+  port: Joi.number().integer().min(1).max(65535).optional(),
   serverType: Joi.string().valid('sqlserver', 'azure-sql').required()
 });
 
 const updateConnectionSchema = Joi.object({
   name: Joi.string().min(1).max(100).optional(),
   description: Joi.string().max(500).optional().allow(''),
-  connectionString: Joi.string().min(1).optional(),
+  server: Joi.string().min(1).optional(),
+  username: Joi.string().min(1).optional(),
+  password: Joi.string().min(1).optional(),
+  database: Joi.string().min(1).optional(),
+  port: Joi.number().integer().min(1).max(65535).optional(),
   serverType: Joi.string().valid('sqlserver', 'azure-sql').optional()
 });
 
@@ -296,6 +304,18 @@ router.get('/replication-configs/:id', async (req: Request, res: Response) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Failed to get replication config via API', { error: errorMessage, id: req.params.id });
+    throw error;
+  }
+});
+
+router.put('/replication-configs/:id', validateRequest(createReplicationConfigSchema), async (req: Request, res: Response) => {
+  try {
+    const config = await secureStorageService.updateReplicationConfig(req.params.id, req.body);
+    logger.info('Replication config updated via API', { id: req.params.id });
+    res.json(config);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to update replication config via API', { error: errorMessage, id: req.params.id });
     throw error;
   }
 });

@@ -18,6 +18,7 @@ interface ElectronAPI {
   api: {
     testConnection: (connectionString: string) => Promise<any>;
     startReplication: (config: any) => Promise<any>;
+    startStoredReplication: (configId: string) => Promise<any>;
     getReplicationStatus: (jobId: string) => Promise<any>;
     cancelReplication: (jobId: string) => Promise<any>;
   };
@@ -48,6 +49,16 @@ const electronAPI: ElectronAPI = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(config)
+      }).then(res => res.json());
+    },
+    
+    startStoredReplication: async (configId: string) => {
+      return fetch('http://localhost:3001/api/replication/start-stored', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ configId })
       }).then(res => res.json());
     },
     

@@ -2,7 +2,11 @@ export interface StoredConnection {
   id: string;
   name: string;
   description?: string;
-  connectionString: string; // Will be encrypted when stored
+  server: string; // Will be encrypted when stored
+  username: string; // Will be encrypted when stored
+  password: string; // Will be encrypted when stored
+  database: string; // Will be encrypted when stored
+  port?: number; // Optional, defaults will be used based on serverType
   serverType: 'sqlserver' | 'azure-sql';
   createdAt: Date;
   updatedAt: Date;
@@ -63,8 +67,10 @@ export interface ConnectionInfo {
   name: string;
   description?: string;
   serverType: 'sqlserver' | 'azure-sql';
-  serverName?: string; // Extracted from connection string for display
-  databaseName?: string; // Extracted from connection string for display
+  server: string;
+  username: string;
+  database: string;
+  port?: number;
   createdAt: Date;
   updatedAt: Date;
   lastUsed?: Date;
@@ -84,14 +90,22 @@ export interface StorageData {
 export interface CreateConnectionRequest {
   name: string;
   description?: string;
-  connectionString: string;
+  server: string;
+  username: string;
+  password: string;
+  database: string;
+  port?: number;
   serverType: 'sqlserver' | 'azure-sql';
 }
 
 export interface UpdateConnectionRequest {
   name?: string;
   description?: string;
-  connectionString?: string;
+  server?: string;
+  username?: string;
+  password?: string;
+  database?: string;
+  port?: number;
   serverType?: 'sqlserver' | 'azure-sql';
 }
 

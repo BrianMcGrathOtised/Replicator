@@ -150,4 +150,25 @@ router.post('/cancel/:jobId', async (req: Request, res: Response, next: NextFunc
   }
 });
 
+// Start replication from configuration ID (new approach)
+router.post('/start-from-config', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { configurationId } = req.body;
+    
+    if (!configurationId) {
+      throw new CustomError('Configuration ID is required', 400);
+    }
+
+    const jobId = await replicationService.startReplicationFromConfigId(configurationId);
+    
+    res.json({
+      success: true,
+      message: 'Replication started from configuration',
+      data: { jobId }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export { router as replicationRoutes }; 

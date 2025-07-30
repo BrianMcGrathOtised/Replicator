@@ -351,6 +351,56 @@ Original error: ${errorMessage}`;
     return jobId;
   }
 
+  async startReplicationFromConfigId(configurationId: string): Promise<string> {
+    try {
+      // Import the data service to access stored data
+      const { dataService } = await import('../services/DataService');
+      
+      const configuration = dataService.getConfiguration(configurationId);
+      if (!configuration) {
+        throw new Error('Configuration not found');
+      }
+      
+      const sourceConnection = dataService.getConnection(configuration.sourceConnectionId);
+      const targetConnection = dataService.getConnection(configuration.targetConnectionId);
+      
+      if (!sourceConnection || !targetConnection) {
+        throw new Error('Source or target connection not found');
+      }
+      
+      // Get scripts
+      const scripts: string[] = [];
+      for (const scriptId of configuration.scriptIds) {
+        const script = dataService.getScript(scriptId);
+        if (script) {
+          scripts.push(script.content);
+        }
+      }
+      
+      // Build replication config
+      const replicationConfig: ReplicationConfig = {
+        connectionString: sourceConnection.connectionString,
+        target: {
+          targetType: 'sqlserver',
+          connectionString: targetConnection.connectionString,
+          createNewDatabase: configuration.createTargetDatabase
+        },
+        configScripts: scripts,
+        settings: {
+          includeData: true,
+          includeSchema: true
+        }
+      };
+      
+      return this.startReplication(replicationConfig);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to start replication from configuration', { configurationId, error: errorMessage });
+      throw new Error(`Failed to start replication from configuration: ${errorMessage}`);
+    }
+  }
+
   // Start replication from stored configuration
   async startStoredReplication(request: StoredReplicationRequest): Promise<string> {
     try {
@@ -490,7 +540,14 @@ Original error: ${errorMessage}`;
       
       // Execute configuration scripts if any
       if (config.configScripts && config.configScripts.length > 0) {
+        logger.info('Starting post-replication script execution', { 
+          scriptCount: config.configScripts.length,
+          targetDatabase: finalDatabaseName 
+        });
         await this.executeConfigScripts(config.target, config.configScripts);
+        logger.info('All post-replication scripts completed successfully');
+      } else {
+        logger.info('No post-replication scripts to execute');
       }
       
       status.progress = 95;
@@ -784,7 +841,15 @@ Original error: ${errorMessage}`;
       return;
     }
 
-    logger.info('Executing configuration scripts', { scriptCount: scripts.length });
+    // Extract database name for logging
+    const dbNameMatch = targetConfig.connectionString.match(/(?:database|initial catalog)=([^;]+)/i);
+    const targetDatabaseName = dbNameMatch ? dbNameMatch[1] : 'Unknown';
+
+    logger.info('Executing configuration scripts on target database', { 
+      scriptCount: scripts.length,
+      targetDatabase: targetDatabaseName,
+      connectionString: targetConfig.connectionString.replace(/password=[^;]*/i, 'password=***')
+    });
     
     // Only SQL Server targets are supported
     if (targetConfig.targetType !== 'sqlserver') {
@@ -795,14 +860,22 @@ Original error: ${errorMessage}`;
     await targetPool.connect();
     
     try {
-      for (const script of scripts) {
-        logger.info('Executing configuration script', { script });
+      for (let i = 0; i < scripts.length; i++) {
+        const script = scripts[i];
+        logger.info(`Executing script ${i + 1}/${scripts.length} on database ${targetDatabaseName}`, { 
+          scriptPreview: script.substring(0, 100) + (script.length > 100 ? '...' : ''),
+          scriptLength: script.length 
+        });
         await targetPool.request().query(script);
+        logger.info(`Script ${i + 1}/${scripts.length} completed successfully`);
       }
     } finally {
       await targetPool.close();
     }
     
-    logger.info('Configuration scripts executed successfully');
+    logger.info('All configuration scripts executed successfully on target database', { 
+      targetDatabase: targetDatabaseName,
+      scriptCount: scripts.length 
+    });
   }
 } 

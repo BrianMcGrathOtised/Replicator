@@ -152,6 +152,42 @@ body {
   color: #2d3748;
 }
 
+/* Script checkboxes in configuration modal */
+.script-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.script-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  transform: scale(1.1);
+  cursor: pointer;
+}
+
+.script-checkbox label {
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+  color: #4a5568;
+  font-weight: 500;
+  flex: 1;
+}
+
+.script-checkbox:hover label {
+  color: #2d3748;
+}
+
+.script-checkbox small {
+  display: block;
+  color: #718096;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+  margin-left: 1.5rem; /* Align with label text */
+}
+
 /* Buttons */
 .btn {
   padding: 0.75rem 1.5rem;
@@ -565,12 +601,12 @@ body {
 
 .storage-item-meta {
   font-size: 12px;
-  color: #888888;
+  color: #b0b0b0;
   margin-top: 4px;
 }
 
 .storage-item-description {
-  color: #cccccc;
+  color: #e0e0e0;
   font-size: 14px;
   margin: 8px 0;
   line-height: 1.4;
@@ -590,14 +626,14 @@ body {
 }
 
 .storage-item-detail label {
-  color: #888888;
+  color: #b0b0b0;
   font-size: 11px;
   text-transform: uppercase;
   margin-bottom: 2px;
 }
 
 .storage-item-detail span {
-  color: #cccccc;
+  color: #e0e0e0;
 }
 
 .storage-item-actions {
@@ -616,6 +652,48 @@ body {
   color: #888888;
   padding: 40px 20px;
   font-style: italic;
+}
+
+/* Item Header and Details Styles (for saved items) */
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.item-header h4 {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 16px;
+  margin: 0;
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.item-actions .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.item-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.item-details > div {
+  color: #e0e0e0;
+}
+
+.item-details strong {
+  color: #ffffff;
+  font-weight: 600;
 }
 
 /* Connection Input Group */
