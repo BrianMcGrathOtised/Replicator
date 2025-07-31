@@ -15,7 +15,8 @@ const createConnectionSchema = Joi.object({
   password: Joi.string().min(1).required(),
   database: Joi.string().min(1).required(),
   port: Joi.number().integer().min(1).max(65535).optional(),
-  serverType: Joi.string().valid('sqlserver', 'azure-sql').required()
+  serverType: Joi.string().valid('sqlserver', 'azure-sql').required(),
+  isTargetDatabase: Joi.boolean().optional().default(false)
 });
 
 const updateConnectionSchema = Joi.object({
@@ -26,7 +27,8 @@ const updateConnectionSchema = Joi.object({
   password: Joi.string().min(1).optional(),
   database: Joi.string().min(1).optional(),
   port: Joi.number().integer().min(1).max(65535).optional(),
-  serverType: Joi.string().valid('sqlserver', 'azure-sql').optional()
+  serverType: Joi.string().valid('sqlserver', 'azure-sql').optional(),
+  isTargetDatabase: Joi.boolean().optional()
 });
 
 const createScriptSchema = Joi.object({
@@ -73,7 +75,7 @@ const createReplicationConfigSchema = Joi.object({
   name: Joi.string().min(1).max(100).required(),
   description: Joi.string().max(500).optional(),
   sourceConnectionId: Joi.string().uuid().required(),
-  targetId: Joi.string().uuid().required(),
+  targetId: Joi.string().uuid().required(), // Now expects a connection ID instead of target ID
   configScriptIds: Joi.array().items(Joi.string().uuid()).required(),
   settings: Joi.object({
     includeTables: Joi.array().items(Joi.string()).optional(),
@@ -97,7 +99,7 @@ router.post('/connections', validateRequest(createConnectionSchema), async (req:
   }
 });
 
-router.get('/connections', async (req: Request, res: Response) => {
+router.get('/connections', async (_req: Request, res: Response) => {
   try {
     const connections = await secureStorageService.getConnections();
     res.json(connections);
@@ -168,7 +170,7 @@ router.post('/scripts', validateRequest(createScriptSchema), async (req: Request
   }
 });
 
-router.get('/scripts', async (req: Request, res: Response) => {
+router.get('/scripts', async (_req: Request, res: Response) => {
   try {
     const scripts = await secureStorageService.getScripts();
     res.json(scripts);
@@ -227,7 +229,7 @@ router.post('/targets', validateRequest(createTargetSchema), async (req: Request
   }
 });
 
-router.get('/targets', async (req: Request, res: Response) => {
+router.get('/targets', async (_req: Request, res: Response) => {
   try {
     const targets = await secureStorageService.getTargets();
     res.json(targets);
@@ -286,7 +288,7 @@ router.post('/replication-configs', validateRequest(createReplicationConfigSchem
   }
 });
 
-router.get('/replication-configs', async (req: Request, res: Response) => {
+router.get('/replication-configs', async (_req: Request, res: Response) => {
   try {
     const configs = await secureStorageService.getReplicationConfigs();
     res.json(configs);

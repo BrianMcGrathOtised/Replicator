@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { logger } from '../utils/logger';
 
 const router = Router();
 
 // Health check endpoint
-router.get('/', (req: Request, res: Response) => {
+router.get('/', (_req: Request, res: Response) => {
   res.json({
     success: true,
     message: 'Server is healthy',
@@ -14,7 +13,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // Database connectivity check (placeholder)
-router.get('/db', (req: Request, res: Response) => {
+router.get('/db', (_req: Request, res: Response) => {
   // TODO: Implement actual database connectivity check
   res.json({
     success: true,

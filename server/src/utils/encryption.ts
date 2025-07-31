@@ -68,7 +68,6 @@ class EncryptionService {
       const combined = Buffer.from(encryptedData, 'base64');
       
       // Extract components
-      const iv = combined.slice(0, IV_LENGTH);
       const encrypted = combined.slice(IV_LENGTH);
       
       const decipher = crypto.createDecipher(ALGORITHM, this.encryptionKey);

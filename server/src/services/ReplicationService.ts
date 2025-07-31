@@ -1,5 +1,4 @@
 import * as mssql from 'mssql';
-import { Database } from 'sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 import { CustomError } from '../middleware/errorHandler';
@@ -406,8 +405,10 @@ Original error: ${errorMessage}`;
     try {
       // Get stored replication configuration
       const storedConfig = await secureStorageService.getReplicationConfig(request.configId);
-      const target = await secureStorageService.getTarget(storedConfig.targetId);
-      const connectionString = await secureStorageService.getConnectionString(storedConfig.sourceConnectionId);
+      // targetId is now a connection ID (marked as target database)
+      const targetConnection = await secureStorageService.getConnection(storedConfig.targetId);
+      const sourceConnectionString = await secureStorageService.getConnectionString(storedConfig.sourceConnectionId);
+      const targetConnectionString = await secureStorageService.getConnectionString(storedConfig.targetId);
       
       // Get config scripts content
       const configScripts: string[] = [];
@@ -416,30 +417,22 @@ Original error: ${errorMessage}`;
         configScripts.push(script.content);
       }
       
-      // Build replication config
+      // Verify the target connection is marked as a target database
+      if (!targetConnection.isTargetDatabase) {
+        throw new CustomError('Target connection is not marked as a target database', 400);
+      }
+      
+      // Build replication config - now using direct connection
       const targetConfig: any = {
-        targetType: target.targetType,
-        createNewDatabase: storedConfig.settings.includeSchema !== false
+        targetType: 'sqlserver', // Since we're using direct connections, assume SQL Server
+        connectionString: targetConnectionString,
+        createNewDatabase: storedConfig.settings.includeSchema !== false,
+        overwriteExisting: true, // Default to overwrite since we're creating if not exists
+        backupBefore: false // Default to no backup for simplicity
       };
-      
-      if (target.configuration.filePath) {
-        targetConfig.filePath = target.configuration.filePath;
-      }
-      
-      if (target.configuration.connectionId) {
-        targetConfig.connectionString = await secureStorageService.getConnectionString(target.configuration.connectionId);
-      }
-      
-      if (target.configuration.overwriteExisting !== undefined) {
-        targetConfig.overwriteExisting = target.configuration.overwriteExisting;
-      }
-      
-      if (target.configuration.backupBefore !== undefined) {
-        targetConfig.backupBefore = target.configuration.backupBefore;
-      }
 
       const replicationConfig: ReplicationConfig = {
-        connectionString,
+        connectionString: sourceConnectionString,
         target: targetConfig,
         configScripts,
         settings: storedConfig.settings
@@ -574,7 +567,7 @@ Original error: ${errorMessage}`;
     }
   }
 
-  private async createBacpac(sourcePool: mssql.ConnectionPool, config: ReplicationConfig, status: ReplicationStatus): Promise<string> {
+  private async createBacpac(_sourcePool: mssql.ConnectionPool, config: ReplicationConfig, status: ReplicationStatus): Promise<string> {
     const { spawn } = require('child_process');
     const path = require('path');
     const fs = require('fs').promises;

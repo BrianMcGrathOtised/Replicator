@@ -152,6 +152,16 @@ body {
   color: #2d3748;
 }
 
+/* Modal-specific checkbox styling for better contrast */
+.modal-body .checkbox-item label {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.modal-body .checkbox-item:hover label {
+  color: #1a202c;
+}
+
 /* Script checkboxes in configuration modal */
 .script-checkbox {
   display: flex;
@@ -171,21 +181,22 @@ body {
   margin: 0;
   cursor: pointer;
   user-select: none;
-  color: #4a5568;
-  font-weight: 500;
+  color: #2d3748;
+  font-weight: 600;
   flex: 1;
 }
 
 .script-checkbox:hover label {
-  color: #2d3748;
+  color: #1a202c;
 }
 
 .script-checkbox small {
   display: block;
-  color: #718096;
+  color: #4a5568;
   font-size: 0.8rem;
   margin-top: 0.25rem;
   margin-left: 1.5rem; /* Align with label text */
+  font-weight: 500;
 }
 
 /* Buttons */
@@ -794,7 +805,7 @@ body {
 }
 
 .modal {
-  background: #2a2a2a;
+  background: #ffffff;
   border-radius: 8px;
   width: 90%;
   max-width: 600px;
@@ -802,6 +813,7 @@ body {
   display: flex;
   flex-direction: column;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border: 2px solid #e2e8f0;
 }
 
 .modal-header {
@@ -809,19 +821,21 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid #404040;
+  border-bottom: 2px solid #e2e8f0;
+  background: #f7fafc;
 }
 
 .modal-header h3 {
   margin: 0;
-  color: #ffffff;
+  color: #1a202c;
   font-size: 18px;
+  font-weight: 700;
 }
 
 .modal-close {
   background: none;
   border: none;
-  color: #888888;
+  color: #4a5568;
   font-size: 24px;
   cursor: pointer;
   padding: 0;
@@ -832,17 +846,20 @@ body {
   justify-content: center;
   border-radius: 4px;
   transition: all 0.2s ease;
+  font-weight: bold;
 }
 
 .modal-close:hover {
-  background: #404040;
-  color: #ffffff;
+  background: #e2e8f0;
+  color: #1a202c;
 }
 
 .modal-body {
   padding: 20px;
   flex: 1;
   overflow-y: auto;
+  background: #ffffff;
+  color: #1a202c;
 }
 
 .modal-footer {
@@ -850,7 +867,8 @@ body {
   justify-content: flex-end;
   gap: 12px;
   padding: 20px;
-  border-top: 1px solid #404040;
+  border-top: 2px solid #e2e8f0;
+  background: #f7fafc;
 }
 
 /* Form Styles for Modal */
@@ -862,6 +880,31 @@ body {
 
 .modal-form .form-group {
   margin-bottom: 0;
+}
+
+.modal-form .form-group label {
+  color: #2d3748;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.modal-form .form-group input,
+.modal-form .form-group textarea,
+.modal-form .form-group select {
+  color: #1a202c;
+  background: #ffffff;
+  font-weight: 500;
+}
+
+.modal-form .form-group input::placeholder,
+.modal-form .form-group textarea::placeholder {
+  color: #718096;
+  font-weight: 400;
+}
+
+.modal-form .form-group small {
+  color: #4a5568;
+  font-weight: 500;
 }
 
 .modal-form .form-row {
@@ -880,6 +923,8 @@ body {
   font-family: 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.4;
+  color: #1a202c;
+  font-weight: 500;
 }
 
 .modal-form .tag-input {
@@ -888,9 +933,9 @@ body {
   gap: 6px;
   align-items: center;
   padding: 8px;
-  border: 1px solid #404040;
+  border: 2px solid #e2e8f0;
   border-radius: 4px;
-  background: #1e1e1e;
+  background: #ffffff;
   min-height: 40px;
 }
 
@@ -903,6 +948,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  font-weight: 600;
 }
 
 .modal-form .tag-remove {
@@ -918,6 +964,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 12px;
+  font-weight: bold;
 }
 
 .modal-form .tag-remove:hover {
@@ -928,14 +975,16 @@ body {
   flex: 1;
   background: none;
   border: none;
-  color: #ffffff;
+  color: #1a202c;
   outline: none;
   font-size: 14px;
   min-width: 100px;
+  font-weight: 500;
 }
 
 .modal-form .tag-input-field::placeholder {
-  color: #888888;
+  color: #718096;
+  font-weight: 400;
 }
 
 /* Status Indicators */
@@ -1169,7 +1218,76 @@ body {
 
 /* Additional Modal Content Styles */
 .modal-body .script-view .script-meta p strong {
-  color: #ffffff;
+  color: #1a202c;
+  font-weight: 700;
+}
+
+/* Ensure all modal content has high contrast */
+.modal-body p,
+.modal-body div,
+.modal-body span {
+  color: #1a202c;
+}
+
+.modal-body .script-meta {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  color: #1a202c;
+}
+
+.modal-body .script-meta p {
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.modal-body .script-content {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  color: #1a202c;
+  font-weight: 500;
+}
+
+/* Modal form specific overrides for maximum contrast */
+#connectionForm label,
+#sqlScriptForm label,
+#configForm label {
+  color: #1a202c !important;
+  font-weight: 700 !important;
+}
+
+#connectionForm input,
+#connectionForm textarea,
+#connectionForm select,
+#sqlScriptForm input,
+#sqlScriptForm textarea,
+#sqlScriptForm select,
+#configForm input,
+#configForm textarea,
+#configForm select {
+  color: #1a202c !important;
+  background: #ffffff !important;
+  font-weight: 600 !important;
+  border: 2px solid #cbd5e0 !important;
+}
+
+#connectionForm input:focus,
+#connectionForm textarea:focus,
+#connectionForm select:focus,
+#sqlScriptForm input:focus,
+#sqlScriptForm textarea:focus,
+#sqlScriptForm select:focus,
+#configForm input:focus,
+#configForm textarea:focus,
+#configForm select:focus {
+  border-color: #667eea !important;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15) !important;
+}
+
+#connectionForm small,
+#sqlScriptForm small,
+#configForm small {
+  color: #2d3748 !important;
+  font-weight: 600 !important;
 }
 
 /* Status colors for connection status */

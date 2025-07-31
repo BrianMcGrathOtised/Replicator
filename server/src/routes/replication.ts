@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
-import { logger } from '../utils/logger';
 import { CustomError } from '../middleware/errorHandler';
 import { ReplicationService } from '../services/ReplicationService';
 import { validateConnectionString, validateRequest, validateReplicationConfig } from '../utils/validation';

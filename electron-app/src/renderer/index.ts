@@ -27,12 +27,26 @@ declare global {
 }
 
 // Interfaces
+interface Target {
+  id: string;
+  name: string;
+  targetType: string;
+  configuration: {
+    connectionId: string;
+    overwriteExisting: boolean;
+    backupBefore: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface AppState {
   isReplicating: boolean;
   currentJobId: string | null;
   configurations: StoredConfiguration[];
   selectedConfigId: string | null;
   connections: SavedConnection[];
+  targets: Target[];
   sqlScripts: SavedSqlScript[];
   activeTab: string;
 }
@@ -41,7 +55,7 @@ interface StoredConfiguration {
   id: string;
   name: string;
   sourceConnectionId: string;
-  targetConnectionId: string;
+  targetId: string; // Changed from targetId to match server
   createTargetDatabase: boolean;
   scriptIds: string[];
   createdAt: string;
@@ -77,6 +91,7 @@ class DataReplicatorUI {
     configurations: [],
     selectedConfigId: null,
     connections: [],
+    targets: [],
     sqlScripts: [],
     activeTab: 'connections'
   };
@@ -132,6 +147,7 @@ class DataReplicatorUI {
     password: document.getElementById('password') as HTMLInputElement,
     port: document.getElementById('port') as HTMLInputElement,
     connectionDescription: document.getElementById('connectionDescription') as HTMLTextAreaElement,
+    isTargetDatabase: document.getElementById('isTargetDatabase') as HTMLInputElement,
     testConnectionBtn: document.getElementById('testConnectionBtn') as HTMLButtonElement,
     
     // SQL Script Modal
@@ -151,7 +167,7 @@ class DataReplicatorUI {
     configName: document.getElementById('configName') as HTMLInputElement,
     sourceConnection: document.getElementById('sourceConnection') as HTMLSelectElement,
     targetConnection: document.getElementById('targetConnection') as HTMLSelectElement,
-    createTargetDatabase: document.getElementById('createTargetDatabase') as HTMLInputElement,
+    // createTargetDatabase checkbox removed - always create if doesn't exist
     scriptSelection: document.getElementById('scriptSelection') as HTMLDivElement,
   };
 
@@ -159,7 +175,20 @@ class DataReplicatorUI {
     this.init();
   }
 
+  private clearCachedData() {
+    // Clear any localStorage data that might conflict with storage.json
+    // Since we now use storage.json exclusively for all data
+    localStorage.removeItem('saved-configurations');
+    localStorage.removeItem('saved-replication-configs');
+    localStorage.removeItem('replication-configurations');
+    localStorage.removeItem('configurations');
+    localStorage.removeItem('saved-sql-scripts'); // Clear old script storage
+    this.log('Cleared any cached data from localStorage');
+  }
+
   private async init() {
+    // Clear any potentially cached configuration data to prevent conflicts
+    this.clearCachedData();
     this.validateElements();
     this.setupEventListeners();
     await this.loadAllData();
@@ -179,6 +208,7 @@ class DataReplicatorUI {
     if (!this.elements.password) missingElements.push('password');
     if (!this.elements.port) missingElements.push('port');
     if (!this.elements.connectionDescription) missingElements.push('connectionDescription');
+    if (!this.elements.isTargetDatabase) missingElements.push('isTargetDatabase');
     if (!this.elements.serverType) missingElements.push('serverType');
     if (!this.elements.testConnectionBtn) missingElements.push('testConnectionBtn');
     if (!this.elements.connectionModalSaveBtn) missingElements.push('connectionModalSaveBtn');
@@ -189,7 +219,7 @@ class DataReplicatorUI {
     if (!this.elements.configName) missingElements.push('configName');
     if (!this.elements.sourceConnection) missingElements.push('sourceConnection');
     if (!this.elements.targetConnection) missingElements.push('targetConnection');
-    if (!this.elements.createTargetDatabase) missingElements.push('createTargetDatabase');
+    // createTargetDatabase checkbox removed - always create if doesn't exist
     if (!this.elements.scriptSelection) missingElements.push('scriptSelection');
     if (!this.elements.configModalSaveBtn) missingElements.push('configModalSaveBtn');
     if (!this.elements.configModalCancelBtn) missingElements.push('configModalCancelBtn');
@@ -317,6 +347,7 @@ class DataReplicatorUI {
         }
         
         if (this.elements.serverType) this.elements.serverType.value = connection.isAzure ? 'azure-sql' : 'sqlserver';
+        if (this.elements.isTargetDatabase) this.elements.isTargetDatabase.checked = connection.isTargetDatabase;
         
         const titleElement = document.getElementById('connectionModalTitle') as HTMLElement;
         if (titleElement) titleElement.textContent = 'Edit Database Connection';
@@ -333,6 +364,9 @@ class DataReplicatorUI {
     // Clear the editing connection ID
     (this.elements.connectionModal as any).editingConnectionId = null;
     this.resetConnectionModal();
+    // Update UI when modal is closed to reflect any changes
+    this.updateConnectionsList();
+    this.updateConfigSelect();
   }
 
   private resetConnectionModal() {
@@ -344,6 +378,7 @@ class DataReplicatorUI {
       if (this.elements.password) this.elements.password.value = '';
       if (this.elements.port) this.elements.port.value = '';
       if (this.elements.connectionDescription) this.elements.connectionDescription.value = '';
+      if (this.elements.isTargetDatabase) this.elements.isTargetDatabase.checked = false;
       if (this.elements.serverType) this.elements.serverType.value = 'sqlserver';
       
       const titleElement = document.getElementById('connectionModalTitle') as HTMLElement;
@@ -356,7 +391,8 @@ class DataReplicatorUI {
   private async saveConnection() {
     try {
       if (!this.elements.connectionName || !this.elements.server || !this.elements.database || 
-          !this.elements.username || !this.elements.password || !this.elements.serverType) {
+          !this.elements.username || !this.elements.password || !this.elements.serverType || 
+          !this.elements.isTargetDatabase) {
         this.showError('Connection form elements not available');
         return;
       }
@@ -368,6 +404,7 @@ class DataReplicatorUI {
       const password = this.elements.password.value.trim();
       const port = this.elements.port?.value.trim() || '';
       const description = this.elements.connectionDescription?.value.trim() || '';
+      const isTargetDatabase = this.elements.isTargetDatabase.checked;
       const serverType = this.elements.serverType.value;
 
       if (!name || !server || !database || !username || !password) {
@@ -398,7 +435,7 @@ class DataReplicatorUI {
         name,
         connectionString,
         isAzure,
-        isTargetDatabase: false, // This will be handled differently
+        isTargetDatabase,
         databaseName: database,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -514,6 +551,10 @@ class DataReplicatorUI {
   // SQL Script Management
   private showSqlScriptModal(script?: SavedSqlScript) {
     this.resetSqlScriptModal();
+    
+    // Store the script ID being edited for later use in save
+    (this.elements.sqlScriptModal as any).editingScriptId = script?.id || null;
+    
     if (script) {
       this.elements.sqlScriptName.value = script.name;
       this.elements.sqlScriptContent.value = script.content;
@@ -525,7 +566,11 @@ class DataReplicatorUI {
 
   private hideSqlScriptModal() {
     this.elements.sqlScriptModal.style.display = 'none';
+    // Clear the editing script ID
+    (this.elements.sqlScriptModal as any).editingScriptId = null;
     this.resetSqlScriptModal();
+    // Update UI when modal is closed to reflect any changes
+    this.updateScriptsList();
   }
 
   private resetSqlScriptModal() {
@@ -545,8 +590,11 @@ class DataReplicatorUI {
       return;
     }
 
+    // Check if we're editing an existing script
+    const editingScriptId = (this.elements.sqlScriptModal as any).editingScriptId;
+
     const script: SavedSqlScript = {
-      id: this.generateId(),
+      id: editingScriptId || this.generateId(),
       name,
       content,
       createdAt: new Date().toISOString(),
@@ -555,11 +603,16 @@ class DataReplicatorUI {
     };
 
     try {
-      await this.saveSqlScriptToStorage(script);
-      this.updateScriptsList();
+      if (editingScriptId) {
+        await this.updateSqlScriptToStorage(editingScriptId, script);
+      } else {
+        await this.saveSqlScriptToStorage(script);
+      }
       this.updateConfigModalDropdowns();
       this.hideSqlScriptModal();
-      this.log(`Script "${name}" saved successfully`);
+      
+      const action = editingScriptId ? 'updated' : 'saved';
+      this.log(`Script "${name}" ${action} successfully`);
     } catch (error) {
       this.showError(`Failed to save script: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -608,6 +661,9 @@ class DataReplicatorUI {
     // Clear the editing config ID
     (this.elements.configModal as any).editingConfigId = null;
     this.resetConfigModal();
+    // Update UI when modal is closed to reflect any changes
+    this.updateConfigurationsList();
+    this.updateConfigSelect();
   }
 
   private resetConfigModal() {
@@ -615,7 +671,7 @@ class DataReplicatorUI {
     if (this.elements.configName) this.elements.configName.value = '';
     if (this.elements.sourceConnection) this.elements.sourceConnection.value = '';
     if (this.elements.targetConnection) this.elements.targetConnection.value = '';
-    if (this.elements.createTargetDatabase) this.elements.createTargetDatabase.checked = true;
+    // createTargetDatabase checkbox removed - always create if doesn't exist
     
     // Clear all script checkboxes
     const checkboxes = this.elements.scriptSelection?.querySelectorAll('input[type="checkbox"]');
@@ -632,13 +688,6 @@ class DataReplicatorUI {
     // Update source connections (any type)
     this.elements.sourceConnection.innerHTML = '<option value="">Select saved connection...</option>';
     
-    // Add "Create New" option for source
-    const createSourceOption = document.createElement('option');
-    createSourceOption.value = 'CREATE_NEW';
-    createSourceOption.textContent = '+ Create New Connection';
-    createSourceOption.style.fontStyle = 'italic';
-    createSourceOption.style.color = '#007acc';
-    this.elements.sourceConnection.appendChild(createSourceOption);
     
     // Add separator
     if (this.state.connections.length > 0) {
@@ -655,45 +704,21 @@ class DataReplicatorUI {
       this.elements.sourceConnection.appendChild(option);
     });
 
-    // Update target connections (local only)
-    this.elements.targetConnection.innerHTML = '<option value="">Select saved connection...</option>';
+    // Update target connections dropdown (only connections flagged as target databases)
+    this.elements.targetConnection.innerHTML = '<option value="">Select target database...</option>';
     
-    // Add "Create New" option for target
-    const createTargetOption = document.createElement('option');
-    createTargetOption.value = 'CREATE_NEW';
-    createTargetOption.textContent = '+ Create New Target Connection';
-    createTargetOption.style.fontStyle = 'italic';
-    createTargetOption.style.color = '#007acc';
-    this.elements.targetConnection.appendChild(createTargetOption);
+    // Filter connections that are marked as target databases
+    const targetConnections = this.state.connections.filter(conn => conn.isTargetDatabase);
     
-    // Separate target databases from regular local connections
-    const localConnections = this.state.connections.filter(conn => !conn.isAzure);
-    const targetDatabases = localConnections.filter(conn => conn.isTargetDatabase);
-    const otherLocalConnections = localConnections.filter(conn => !conn.isTargetDatabase);
-    
-    // Add target databases first
-    if (targetDatabases.length > 0) {
-      const separatorOption = document.createElement('option');
-      separatorOption.disabled = true;
-      separatorOption.textContent = '── Target Databases ──';
-      this.elements.targetConnection.appendChild(separatorOption);
-      
-      targetDatabases.forEach(conn => {
-        const option = document.createElement('option');
-        option.value = conn.id;
-        option.textContent = `🎯 ${conn.name} (${conn.databaseName})`;
-        this.elements.targetConnection.appendChild(option);
-      });
-    }
-    
-    // Add other local connections
-    if (otherLocalConnections.length > 0) {
-      const separatorOption = document.createElement('option');
-      separatorOption.disabled = true;
-      separatorOption.textContent = '── Other Local Connections ──';
-      this.elements.targetConnection.appendChild(separatorOption);
-      
-      otherLocalConnections.forEach(conn => {
+    if (targetConnections.length === 0) {
+      const noTargetsOption = document.createElement('option');
+      noTargetsOption.disabled = true;
+      noTargetsOption.textContent = 'No target databases available - mark connections as targets first';
+      noTargetsOption.style.fontStyle = 'italic';
+      noTargetsOption.style.color = '#999';
+      this.elements.targetConnection.appendChild(noTargetsOption);
+    } else {
+      targetConnections.forEach(conn => {
         const option = document.createElement('option');
         option.value = conn.id;
         option.textContent = `${conn.name} (${conn.databaseName})`;
@@ -719,11 +744,33 @@ class DataReplicatorUI {
     try {
       const name = this.elements.configName?.value?.trim() || '';
       const sourceConnectionId = this.elements.sourceConnection?.value || '';
-      const targetConnectionId = this.elements.targetConnection?.value || '';
-      const createTargetDatabase = this.elements.createTargetDatabase?.checked || false;
+      const targetId = this.elements.targetConnection?.value || '';
+      const createTargetDatabase = true; // Always create target database if it doesn't exist
 
-      if (!name || !sourceConnectionId || !targetConnectionId) {
-        this.showError('Please fill in all required fields');
+      if (!name) {
+        this.showError('Configuration name is required');
+        return;
+      }
+      
+      if (!sourceConnectionId) {
+        this.showError('Source connection is required');
+        return;
+      }
+      
+      if (!targetId) {
+        this.showError('Target is required');
+        return;
+      }
+
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(sourceConnectionId)) {
+        this.showError('Invalid source connection ID format');
+        return;
+      }
+      
+      if (!uuidRegex.test(targetId)) {
+        this.showError('Invalid target ID format');
         return;
       }
 
@@ -732,6 +779,7 @@ class DataReplicatorUI {
         selectedScriptIds.push((checkbox as HTMLInputElement).value);
       });
 
+
       // Check if we're editing an existing configuration
       const editingConfigId = (this.elements.configModal as any).editingConfigId;
       
@@ -739,7 +787,7 @@ class DataReplicatorUI {
         id: editingConfigId || this.generateId(),
         name,
         sourceConnectionId,
-        targetConnectionId,
+        targetId: targetId,
         createTargetDatabase,
         scriptIds: selectedScriptIds,
         createdAt: new Date().toISOString(),
@@ -787,7 +835,7 @@ class DataReplicatorUI {
 
   private displayConfigDetails(config: StoredConfiguration) {
     const sourceConnection = this.state.connections.find(c => c.id === config.sourceConnectionId);
-    const targetConnection = this.state.connections.find(c => c.id === config.targetConnectionId);
+    const targetConnection = this.state.connections.find(c => c.id === config.targetId);
     const scripts = this.state.sqlScripts.filter(s => config.scriptIds.includes(s.id));
 
     this.elements.configSource.textContent = sourceConnection 
@@ -1010,7 +1058,7 @@ class DataReplicatorUI {
           </div>
           <div class="config-summary">
             <div><strong>Source:</strong> ${this.getConnectionName(config.sourceConnectionId)}</div>
-            <div><strong>Target:</strong> ${this.getConnectionName(config.targetConnectionId)}</div>
+            <div><strong>Target:</strong> ${this.getConnectionName(config.targetId)}</div>
             <div><strong>Scripts:</strong> ${config.scriptIds.length}</div>
             <div><strong>Last Run:</strong> ${config.lastRun ? this.formatDate(new Date(config.lastRun)) : 'Never'}</div>
           </div>
@@ -1041,6 +1089,7 @@ class DataReplicatorUI {
   private async loadAllData() {
     await Promise.all([
       this.loadConnections(),
+      this.loadTargets(),
       this.loadSqlScripts(),
       this.loadConfigurations()
     ]);
@@ -1061,7 +1110,7 @@ class DataReplicatorUI {
           connectionString: '', // Connection string will be fetched when needed
           description: conn.description || '',
           isAzure: conn.serverType === 'azure-sql',
-          isTargetDatabase: false, // This will be handled differently
+          isTargetDatabase: conn.isTargetDatabase || false,
           databaseName: conn.database || 'Unknown',
           createdAt: conn.createdAt,
           updatedAt: conn.updatedAt
@@ -1077,28 +1126,88 @@ class DataReplicatorUI {
     }
   }
 
-  private async loadSqlScripts() {
+  private async loadTargets() {
     try {
-      const stored = localStorage.getItem('saved-sql-scripts');
-      if (stored) {
-        this.state.sqlScripts = JSON.parse(stored);
+      const response = await fetch(`${API_BASE}/storage/targets`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch targets: ${response.statusText}`);
+      }
+
+      const targets = await response.json();
+      if (Array.isArray(targets)) {
+        this.state.targets = targets;
+        this.log(`Loaded ${this.state.targets.length} targets from storage.json`);
+      } else {
+        throw new Error('Invalid targets data structure');
       }
     } catch (error) {
-      this.log('Failed to load SQL scripts from storage');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Failed to load targets from storage.json: ${errorMessage}`);
+      this.state.targets = [];
+    }
+  }
+
+  private async loadSqlScripts() {
+    try {
+      const response = await fetch(`${API_BASE}/storage/scripts`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch scripts: ${response.statusText}`);
+      }
+
+      const scripts = await response.json();
+      if (Array.isArray(scripts)) {
+        this.state.sqlScripts = scripts.map(script => ({
+          id: script.id,
+          name: script.name,
+          content: script.content,
+          description: script.description || '',
+          language: script.language,
+          tags: script.tags || [],
+          createdAt: script.createdAt,
+          updatedAt: script.updatedAt
+        }));
+        this.log(`Loaded ${this.state.sqlScripts.length} scripts from storage.json`);
+      } else {
+        throw new Error('Invalid scripts data structure');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Failed to load scripts from storage.json: ${errorMessage}`);
       this.state.sqlScripts = [];
     }
   }
 
   private async loadConfigurations() {
     try {
-      // For now, still use localStorage but add server API as future enhancement
-      const stored = localStorage.getItem('replication-configurations');
-      if (stored) {
-        this.state.configurations = JSON.parse(stored);
-        this.log(`Loaded ${this.state.configurations.length} configurations from localStorage`);
+      const response = await fetch(`${API_BASE}/storage/replication-configs`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch configurations: ${response.statusText}`);
+      }
+
+      const serverConfigurations = await response.json();
+      if (Array.isArray(serverConfigurations)) {
+        // Transform server format to frontend format
+        this.state.configurations = serverConfigurations.map(serverConfig => ({
+          id: serverConfig.id,
+          name: serverConfig.name,
+          sourceConnectionId: serverConfig.sourceConnectionId,
+          targetId: serverConfig.targetId, // Keep targetId as is
+          createTargetDatabase: serverConfig.settings?.includeSchema || false,
+          scriptIds: serverConfig.configScriptIds || [], // Map configScriptIds back to scriptIds
+          createdAt: serverConfig.createdAt,
+          updatedAt: serverConfig.updatedAt,
+          lastRun: serverConfig.lastRun
+        }));
+        this.log(`Loaded ${this.state.configurations.length} configurations from storage.json:`);
+        this.state.configurations.forEach(config => {
+          this.log(`  - ${config.name} (ID: ${config.id})`);
+        });
+      } else {
+        throw new Error('Invalid configurations data structure');
       }
     } catch (error) {
-      this.log('Failed to load configurations from storage');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Failed to load configurations from storage.json: ${errorMessage}`);
       this.state.configurations = [];
     }
   }
@@ -1120,7 +1229,8 @@ class DataReplicatorUI {
         password: password,
         database: database,
         port: port ? parseInt(port) : undefined,
-        serverType: connection.isAzure ? 'azure-sql' : 'sqlserver'
+        serverType: connection.isAzure ? 'azure-sql' : 'sqlserver',
+        isTargetDatabase: connection.isTargetDatabase
       };
 
       const response = await fetch(`${API_BASE}/storage/connections`, {
@@ -1181,7 +1291,8 @@ class DataReplicatorUI {
         password: password,
         database: database,
         port: port ? parseInt(port) : undefined,
-        serverType: connection.isAzure ? 'azure-sql' : 'sqlserver'
+        serverType: connection.isAzure ? 'azure-sql' : 'sqlserver',
+        isTargetDatabase: connection.isTargetDatabase
       };
 
       const response = await fetch(`${API_BASE}/storage/connections/${connectionId}`, {
@@ -1264,49 +1375,223 @@ class DataReplicatorUI {
 
   private async saveSqlScriptToStorage(script: SavedSqlScript) {
     try {
+      const requestData = {
+        name: script.name,
+        description: script.description || '',
+        content: script.content,
+        language: 'sql', // Default to SQL
+        tags: []
+      };
+
+      const response = await fetch(`${API_BASE}/storage/scripts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      const savedScript = await response.json();
+      
+      // Update local state
+      const localScript = {
+        id: savedScript.id,
+        name: savedScript.name,
+        content: savedScript.content,
+        description: savedScript.description || '',
+        createdAt: savedScript.createdAt,
+        updatedAt: savedScript.updatedAt
+      };
+
       const index = this.state.sqlScripts.findIndex(s => s.id === script.id);
       if (index >= 0) {
-        this.state.sqlScripts[index] = script;
+        this.state.sqlScripts[index] = localScript;
       } else {
-        this.state.sqlScripts.push(script);
+        this.state.sqlScripts.push(localScript);
       }
       
-      localStorage.setItem('saved-sql-scripts', JSON.stringify(this.state.sqlScripts));
+      this.log(`Script "${script.name}" saved to storage.json`);
     } catch (error) {
-      throw new Error('Failed to save SQL script to storage');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Failed to save script: ${errorMessage}`);
+      throw new Error(`Failed to save script to storage: ${errorMessage}`);
+    }
+  }
+
+  private async updateSqlScriptToStorage(scriptId: string, script: SavedSqlScript) {
+    try {
+      const requestData = {
+        name: script.name,
+        description: script.description || '',
+        content: script.content,
+        language: 'sql', // Default to SQL
+        tags: []
+      };
+
+      const response = await fetch(`${API_BASE}/storage/scripts/${scriptId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      const updatedScript = await response.json();
+      
+      // Update local state
+      const localScript = {
+        id: updatedScript.id,
+        name: updatedScript.name,
+        content: updatedScript.content,
+        description: updatedScript.description || '',
+        createdAt: updatedScript.createdAt,
+        updatedAt: updatedScript.updatedAt
+      };
+
+      const index = this.state.sqlScripts.findIndex(s => s.id === scriptId);
+      if (index >= 0) {
+        this.state.sqlScripts[index] = localScript;
+      }
+      
+      this.log(`Script "${script.name}" updated in storage.json`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Failed to update script: ${errorMessage}`);
+      throw new Error(`Failed to update script in storage: ${errorMessage}`);
     }
   }
 
   private async saveConfigurationToStorage(config: StoredConfiguration) {
     try {
+      // Transform frontend config to server format
+      const serverConfig = {
+        name: config.name,
+        // Don't include description field since we don't need it
+        sourceConnectionId: config.sourceConnectionId,
+        targetId: config.targetId, // Use the selected target ID
+        configScriptIds: config.scriptIds, // Map scriptIds to configScriptIds
+        settings: {
+          includeData: true,
+          includeSchema: config.createTargetDatabase
+        }
+      };
+
+      const response = await fetch(`${API_BASE}/storage/replication-configs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverConfig)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.log(`Server response status: ${response.status}`);
+        this.log(`Server error response: ${errorText}`);
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      const savedConfig = await response.json();
+      
+      // Update the config with the server-generated ID and data
+      const updatedConfig: StoredConfiguration = {
+        id: savedConfig.id, // Use the server-generated UUID
+        name: savedConfig.name,
+        sourceConnectionId: savedConfig.sourceConnectionId,
+        targetId: savedConfig.targetId,
+        createTargetDatabase: savedConfig.settings?.includeSchema || false,
+        scriptIds: savedConfig.configScriptIds || [],
+        createdAt: savedConfig.createdAt,
+        updatedAt: savedConfig.updatedAt,
+        lastRun: savedConfig.lastRun
+      };
+      
+      // Update local state with the corrected configuration
       const index = this.state.configurations.findIndex(c => c.id === config.id);
       if (index >= 0) {
-        this.state.configurations[index] = config;
+        this.state.configurations[index] = updatedConfig;
       } else {
-        this.state.configurations.push(config);
+        this.state.configurations.push(updatedConfig);
       }
+
       
-      localStorage.setItem('replication-configurations', JSON.stringify(this.state.configurations));
-      this.log(`Configuration "${config.name}" saved to localStorage`);
+      // Close the modal which will trigger UI updates
+      this.hideConfigModal();
     } catch (error) {
-      throw new Error('Failed to save configuration to storage');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to save configuration to storage: ${errorMessage}`);
     }
   }
 
   private async updateConfigurationToStorage(configId: string, config: StoredConfiguration) {
     try {
+      // Transform frontend config to server format
+      const serverConfig = {
+        name: config.name,
+        // Don't include description field since we don't need it
+        sourceConnectionId: config.sourceConnectionId,
+        targetId: config.targetId, // Use the selected target ID
+        configScriptIds: config.scriptIds, // Map scriptIds to configScriptIds
+        settings: {
+          includeData: true,
+          includeSchema: config.createTargetDatabase
+        }
+      };
+
+      this.log(`Attempting to update configuration: ${configId}`);
+      this.log(`PUT URL: ${API_BASE}/storage/replication-configs/${configId}`);
+      this.log(`PUT body: ${JSON.stringify(serverConfig, null, 2)}`);
+      
+      const response = await fetch(`${API_BASE}/storage/replication-configs/${configId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverConfig)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      const updatedConfig = await response.json();
+      
+      // Transform server response back to frontend format
+      const frontendConfig: StoredConfiguration = {
+        id: updatedConfig.id,
+        name: updatedConfig.name,
+        sourceConnectionId: updatedConfig.sourceConnectionId,
+        targetId: updatedConfig.targetId,
+        createTargetDatabase: updatedConfig.settings?.includeSchema || false,
+        scriptIds: updatedConfig.configScriptIds || [],
+        createdAt: updatedConfig.createdAt,
+        updatedAt: updatedConfig.updatedAt,
+        lastRun: updatedConfig.lastRun
+      };
+      
+      // Update local state
       const index = this.state.configurations.findIndex(c => c.id === configId);
       if (index >= 0) {
-        this.state.configurations[index] = config;
+        this.state.configurations[index] = frontendConfig;
       } else {
         // Fallback: add if not found (shouldn't happen in normal flow)
-        this.state.configurations.push(config);
+        this.state.configurations.push(frontendConfig);
       }
       
-      localStorage.setItem('replication-configurations', JSON.stringify(this.state.configurations));
-      this.log(`Configuration "${config.name}" updated in localStorage`);
+      this.log(`Configuration "${config.name}" updated in storage.json`);
+      
+      // Close the modal which will trigger UI updates
+      this.hideConfigModal();
     } catch (error) {
-      throw new Error('Failed to update configuration in storage');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Update configuration error: ${errorMessage}`);
+      if (error instanceof Error && error.message === 'Failed to fetch') {
+        this.log('Network error - server may be down or unreachable');
+      }
+      throw new Error(`Failed to update configuration in storage: ${errorMessage}`);
     }
   }
 
@@ -1392,10 +1677,19 @@ class DataReplicatorUI {
     if (!confirm(`Are you sure you want to delete the script "${script.name}"?`)) return;
 
     try {
+      const response = await fetch(`${API_BASE}/storage/scripts/${scriptId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      // Remove from local state
       this.state.sqlScripts = this.state.sqlScripts.filter(s => s.id !== scriptId);
-      localStorage.setItem('saved-sql-scripts', JSON.stringify(this.state.sqlScripts));
       this.updateUI();
-      this.log(`Script "${script.name}" deleted successfully`);
+      this.log(`Script "${script.name}" deleted from storage.json`);
     } catch (error) {
       this.showError(`Failed to delete script: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1416,8 +1710,8 @@ class DataReplicatorUI {
       setTimeout(() => {
         if (this.elements.configName) this.elements.configName.value = config.name;
         if (this.elements.sourceConnection) this.elements.sourceConnection.value = config.sourceConnectionId;
-        if (this.elements.targetConnection) this.elements.targetConnection.value = config.targetConnectionId;
-        if (this.elements.createTargetDatabase) this.elements.createTargetDatabase.checked = config.createTargetDatabase;
+        if (this.elements.targetConnection) this.elements.targetConnection.value = config.targetId;
+        // createTargetDatabase checkbox removed - always create if doesn't exist
         
         // Select the scripts
         config.scriptIds.forEach(scriptId => {
@@ -1438,14 +1732,34 @@ class DataReplicatorUI {
   }
 
   public async deleteConfiguration(configId: string) {
+    this.log(`deleteConfiguration called with ID: ${configId}`);
     const config = this.state.configurations.find(c => c.id === configId);
-    if (!config) return;
+    if (!config) {
+      this.log(`Configuration with ID ${configId} not found in current state`);
+      this.log('Available configurations:');
+      this.state.configurations.forEach(c => {
+        this.log(`  - ${c.name} (ID: ${c.id})`);
+      });
+      return;
+    }
 
     if (!confirm(`Are you sure you want to delete the configuration "${config.name}"?`)) return;
 
     try {
+      this.log(`Attempting to delete configuration: ${configId}`);
+      this.log(`DELETE URL: ${API_BASE}/storage/replication-configs/${configId}`);
+      
+      const response = await fetch(`${API_BASE}/storage/replication-configs/${configId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${errorText}`);
+      }
+
+      // Update local state
       this.state.configurations = this.state.configurations.filter(c => c.id !== configId);
-      localStorage.setItem('replication-configurations', JSON.stringify(this.state.configurations));
       
       // Clear selection if this config was selected
       if (this.state.selectedConfigId === configId) {
@@ -1455,9 +1769,17 @@ class DataReplicatorUI {
       }
       
       this.updateUI();
-      this.log(`Configuration "${config.name}" deleted successfully`);
+      this.log(`Configuration "${config.name}" deleted successfully from storage.json`);
+      
+      // Optionally refresh configurations from server to ensure sync
+      await this.loadConfigurations();
     } catch (error) {
-      this.showError(`Failed to delete configuration: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log(`Delete configuration error: ${errorMessage}`);
+      if (error instanceof Error && error.message === 'Failed to fetch') {
+        this.log('Network error - server may be down or unreachable');
+      }
+      this.showError(`Failed to delete configuration: ${errorMessage}`);
     }
   }
 

@@ -277,6 +277,7 @@ export class SecureStorageService {
         database: encryptedDatabase,
         ...(request.port && { port: request.port }),
         serverType: request.serverType,
+        ...(request.isTargetDatabase !== undefined && { isTargetDatabase: request.isTargetDatabase }),
         createdAt: now,
         updatedAt: now
       };
@@ -295,6 +296,7 @@ export class SecureStorageService {
         username: request.username,
         database: request.database,
         ...(request.port && { port: request.port }),
+        ...(request.isTargetDatabase !== undefined && { isTargetDatabase: request.isTargetDatabase }),
         createdAt: now,
         updatedAt: now
       };
@@ -322,6 +324,7 @@ export class SecureStorageService {
           username: decryptedUsername,
           database: decryptedDatabase,
           ...(conn.port && { port: conn.port }),
+          ...(conn.isTargetDatabase !== undefined && { isTargetDatabase: conn.isTargetDatabase }),
           createdAt: conn.createdAt,
           updatedAt: conn.updatedAt,
           ...(conn.lastUsed && { lastUsed: conn.lastUsed })
@@ -354,6 +357,7 @@ export class SecureStorageService {
         username: decryptedUsername,
         database: decryptedDatabase,
         ...(connection.port && { port: connection.port }),
+        ...(connection.isTargetDatabase !== undefined && { isTargetDatabase: connection.isTargetDatabase }),
         createdAt: connection.createdAt,
         updatedAt: connection.updatedAt,
         ...(connection.lastUsed && { lastUsed: connection.lastUsed })
@@ -415,6 +419,7 @@ export class SecureStorageService {
       if (request.password) connection.password = encryptionService.encrypt(request.password);
       if (request.database) connection.database = encryptionService.encrypt(request.database);
       if (request.port !== undefined) connection.port = request.port;
+      if (request.isTargetDatabase !== undefined) connection.isTargetDatabase = request.isTargetDatabase;
       connection.updatedAt = new Date();
       
       this.saveData();
@@ -435,6 +440,7 @@ export class SecureStorageService {
         username: decryptedUsername,
         database: decryptedDatabase,
         ...(connection.port && { port: connection.port }),
+        ...(connection.isTargetDatabase !== undefined && { isTargetDatabase: connection.isTargetDatabase }),
         createdAt: connection.createdAt,
         updatedAt: connection.updatedAt,
         ...(connection.lastUsed && { lastUsed: connection.lastUsed })
@@ -650,9 +656,15 @@ export class SecureStorageService {
         throw new CustomError('Source connection not found', 400);
       }
       
-      const target = this.data.targets.find(t => t.id === request.targetId);
-      if (!target) {
-        throw new CustomError('Target not found', 400);
+      // targetId now refers to a connection ID (marked as target database)
+      const targetConnection = this.data.connections.find(c => c.id === request.targetId);
+      if (!targetConnection) {
+        throw new CustomError('Target connection not found', 400);
+      }
+      
+      // Verify the target connection is marked as a target database
+      if (!targetConnection.isTargetDatabase) {
+        throw new CustomError('Connection is not marked as a target database', 400);
       }
       
       for (const scriptId of request.configScriptIds) {
@@ -714,9 +726,15 @@ export class SecureStorageService {
       }
       
       if (request.targetId !== config.targetId) {
-        const target = this.data.targets.find(t => t.id === request.targetId);
-        if (!target) {
-          throw new CustomError('Target not found', 400);
+        // targetId now refers to a connection ID (marked as target database)
+        const targetConnection = this.data.connections.find(c => c.id === request.targetId);
+        if (!targetConnection) {
+          throw new CustomError('Target connection not found', 400);
+        }
+        
+        // Verify the target connection is marked as a target database
+        if (!targetConnection.isTargetDatabase) {
+          throw new CustomError('Connection is not marked as a target database', 400);
         }
       }
       

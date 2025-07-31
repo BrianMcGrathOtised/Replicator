@@ -8,6 +8,7 @@ export interface StoredConnection {
   database: string; // Will be encrypted when stored
   port?: number; // Optional, defaults will be used based on serverType
   serverType: 'sqlserver' | 'azure-sql';
+  isTargetDatabase?: boolean; // Whether this connection can be used as a replication target
   createdAt: Date;
   updatedAt: Date;
   lastUsed?: Date;
@@ -71,6 +72,7 @@ export interface ConnectionInfo {
   username: string;
   database: string;
   port?: number;
+  isTargetDatabase?: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastUsed?: Date;
@@ -96,6 +98,7 @@ export interface CreateConnectionRequest {
   database: string;
   port?: number;
   serverType: 'sqlserver' | 'azure-sql';
+  isTargetDatabase?: boolean;
 }
 
 export interface UpdateConnectionRequest {
@@ -107,6 +110,7 @@ export interface UpdateConnectionRequest {
   database?: string;
   port?: number;
   serverType?: 'sqlserver' | 'azure-sql';
+  isTargetDatabase?: boolean;
 }
 
 export interface CreateScriptRequest {

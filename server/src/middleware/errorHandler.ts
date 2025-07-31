@@ -23,7 +23,7 @@ export const errorHandler = (
   error: AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   const { statusCode = 500, message, stack } = error;
 

@@ -8,7 +8,7 @@ export interface ValidationResult {
 }
 
 export function validateRequest(schema: Joi.ObjectSchema) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, _res: Response, next: NextFunction) => {
     const { error } = schema.validate(req.body);
     
     if (error) {
@@ -32,7 +32,6 @@ export function validateConnectionString(connectionString: string): ValidationRe
 
     // Check for basic SQL Server connection string patterns
     const hasServer = /(?:server|data source|addr)\s*=/i.test(connectionString);
-    const hasDatabase = /(?:database|initial catalog)\s*=/i.test(connectionString);
     
     if (!hasServer) {
       return {

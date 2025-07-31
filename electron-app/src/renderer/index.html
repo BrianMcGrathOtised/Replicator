@@ -90,7 +90,7 @@
                             </div>
                         </div>
 
-                        <div class="form-actions">
+                        <div class="form-actions mt-2">
                             <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
                             <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
                         </div>
@@ -195,6 +195,14 @@
                         ></textarea>
                     </div>
                     
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="isTargetDatabase">
+                            <span class="checkmark"></span>
+                            Mark as Target Database
+                        </label>
+                        <small>Target databases can be used as replication destinations</small>
+                    </div>
 
                 </form>
             </div>
@@ -273,14 +281,7 @@
                         <select id="targetConnection" required>
                             <option value="">Select saved connection...</option>
                         </select>
-                        <small>Local SQL Server only (not Azure)</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <div class="checkbox-item">
-                            <input type="checkbox" id="createTargetDatabase" checked>
-                            <label for="createTargetDatabase">Create target database if it doesn't exist</label>
-                        </div>
+                        <small>Only connections marked as "Target Database" will appear here. Target database will be created if it doesn't exist.</small>
                     </div>
                     
                     <div class="form-group">

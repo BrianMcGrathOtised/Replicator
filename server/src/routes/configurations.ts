@@ -7,7 +7,7 @@ import { dataService, StoredConfiguration } from '../services/DataService';
 const router = Router();
 
 // Get all configurations
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({
       success: true,
