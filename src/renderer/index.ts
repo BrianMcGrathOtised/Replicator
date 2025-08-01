@@ -44,18 +44,6 @@ declare global {
 }
 
 // Interfaces
-interface Target {
-  id: string;
-  name: string;
-  targetType: string;
-  configuration: {
-    connectionId: string;
-    overwriteExisting: boolean;
-    backupBefore: boolean;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface AppState {
   isReplicating: boolean;
@@ -63,7 +51,6 @@ interface AppState {
   configurations: StoredConfiguration[];
   selectedConfigId: string | null;
   connections: SavedConnection[];
-  targets: Target[];
   sqlScripts: SavedSqlScript[];
   activeTab: string;
 }
@@ -108,7 +95,6 @@ class DataReplicatorUI {
     configurations: [],
     selectedConfigId: null,
     connections: [],
-    targets: [],
     sqlScripts: [],
     activeTab: 'connections'
   };
@@ -1085,7 +1071,6 @@ class DataReplicatorUI {
   private async loadAllData() {
     await Promise.all([
       this.loadConnections(),
-      this.loadTargets(),
       this.loadSqlScripts(),
       this.loadConfigurations()
     ]);
@@ -1122,18 +1107,7 @@ class DataReplicatorUI {
     }
   }
 
-  private async loadTargets() {
-    try {
-      // Note: Targets are no longer used in the simplified architecture
-      // Connection entries marked as targets are used instead
-      this.state.targets = [];
-      this.log('Targets no longer used - using target connections instead');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.log(`Note: ${errorMessage}`);
-      this.state.targets = [];
-    }
-  }
+
 
   private async loadSqlScripts() {
     try {
