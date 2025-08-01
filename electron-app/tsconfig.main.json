@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    "target": "ES2022",
+    "module": "CommonJS"
   },
   "include": ["src/main/**/*", "src/preload/**/*"],
   "exclude": ["src/renderer/**/*"]

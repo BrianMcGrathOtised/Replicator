@@ -1,22 +1,13 @@
 {
   "name": "local-data-replicator",
-  "version": "1.0.0",
-  "description": "Electron application for replicating MS SQL Server and Azure SQL databases locally",
+  "version": "2.0.0",
+  "description": "Simplified Electron application for replicating MS SQL Server and Azure SQL databases locally",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:electron\"",
-    "dev:server": "cd server && npm run dev",
-    "dev:electron": "cd electron-app && npm run dev",
-    "build": "npm run build:server && npm run build:electron",
-    "build:server": "cd server && npm run build",
-    "build:electron": "cd electron-app && npm run build",
-    "install:all": "npm install && cd server && npm install && cd ../electron-app && npm install"
+    "dev": "cd electron-app && npm run dev",
+    "build": "cd electron-app && npm run build",
+    "package": "cd electron-app && npm run electron:dist",
+    "install:all": "npm install && cd electron-app && npm install"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
-  "workspaces": [
-    "server",
-    "electron-app"
-  ]
+  "devDependencies": {}
 } 

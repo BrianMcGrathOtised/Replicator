@@ -1,9 +1,6 @@
 import './styles.css';
 
-// API Base URL
-const API_BASE = 'http://localhost:3001/api';
-
-// Type declarations for window.electronAPI
+// Type declarations for window.electronAPI - matches preload interface
 declare global {
   interface Window {
     electronAPI: {
@@ -15,12 +12,32 @@ declare global {
         electronVersion: string;
         nodeVersion: string;
       }>;
-      api: {
+      connections: {
+        getAll: () => Promise<any>;
+        get: (id: string) => Promise<any>;
+        create: (request: any) => Promise<any>;
+        update: (id: string, request: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+      };
+      scripts: {
+        getAll: () => Promise<any>;
+        get: (id: string) => Promise<any>;
+        create: (request: any) => Promise<any>;
+        update: (id: string, request: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+      };
+      configs: {
+        getAll: () => Promise<any>;
+        get: (id: string) => Promise<any>;
+        create: (request: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+      };
+      replication: {
         testConnection: (connectionString: string) => Promise<any>;
-        startReplication: (config: any) => Promise<any>;
-        startStoredReplication: (configId: string) => Promise<any>;
-        getReplicationStatus: (jobId: string) => Promise<any>;
-        cancelReplication: (jobId: string) => Promise<any>;
+        testStoredConnection: (connectionId: string) => Promise<any>;
+        startStored: (request: { configId: string }) => Promise<any>;
+        getStatus: (jobId: string) => Promise<any>;
+        cancel: (jobId: string) => Promise<any>;
       };
     };
   }
@@ -510,18 +527,11 @@ class DataReplicatorUI {
       button.textContent = 'Testing...';
       button.disabled = true;
       
-      const response = await fetch(`${API_BASE}/replication/test-connection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionString })
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+      const result = await window.electronAPI.replication.testConnection(connectionString);
+      
+      if (!result.success) {
+        throw new Error(result.error);
       }
-
-      const result = await response.json();
       this.log(`Connection test successful: ${result.data.serverInfo.databaseName} (${result.data.tables.length} tables)`);
       button.textContent = '✓ Connected';
       button.style.color = 'green';
@@ -872,19 +882,12 @@ class DataReplicatorUI {
       this.updateReplicationButtons();
       this.showProgress(0, 'Starting replication...');
       
-      // Use the stored configuration endpoint which handles connection string decryption
-      const response = await fetch(`${API_BASE}/replication/start-stored`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configId: this.state.selectedConfigId })
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+      // Use the stored configuration IPC which handles connection string decryption
+      const result = await window.electronAPI.replication.startStored({ configId: this.state.selectedConfigId });
+      
+      if (!result.success) {
+        throw new Error(result.error);
       }
-
-      const result = await response.json();
       this.state.currentJobId = result.data.jobId;
       this.log(`Replication started with job ID: ${result.data.jobId}`);
       
@@ -903,15 +906,11 @@ class DataReplicatorUI {
     if (!this.state.currentJobId) return;
 
     try {
-      const cancelUrl = `${API_BASE}/replication/cancel/${this.state.currentJobId}`;
-      console.log('Sending cancel request to:', cancelUrl);
-      const response = await fetch(cancelUrl, {
-        method: 'POST'
-      });
+      console.log('Sending cancel request for job:', this.state.currentJobId);
+      const result = await window.electronAPI.replication.cancel(this.state.currentJobId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to cancel replication (${response.status}): ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Failed to cancel replication: ${result.error}`);
       }
 
       this.log('Replication cancelled');
@@ -924,16 +923,13 @@ class DataReplicatorUI {
     if (!this.state.currentJobId || !this.state.isReplicating) return;
 
     try {
-      const statusUrl = `${API_BASE}/replication/status/${this.state.currentJobId}`;
-      console.log('Fetching status from:', statusUrl);
-      const response = await fetch(statusUrl);
+      console.log('Fetching status for job:', this.state.currentJobId);
+      const result = await window.electronAPI.replication.getStatus(this.state.currentJobId);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get replication status (${response.status}): ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Failed to get replication status: ${result.error}`);
       }
 
-      const result = await response.json();
       const status = result.data;
       
       this.showProgress(status.progress || 0, status.message || 'Processing...');
@@ -1097,12 +1093,12 @@ class DataReplicatorUI {
 
   private async loadConnections() {
     try {
-      const response = await fetch(`${API_BASE}/storage/connections`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch connections: ${response.statusText}`);
+      const result = await window.electronAPI.connections.getAll();
+      if (!result.success) {
+        throw new Error(`Failed to fetch connections: ${result.error}`);
       }
 
-      const connections = await response.json();
+      const connections = result.data;
       if (Array.isArray(connections)) {
         this.state.connections = connections.map(conn => ({
           id: conn.id,
@@ -1128,33 +1124,25 @@ class DataReplicatorUI {
 
   private async loadTargets() {
     try {
-      const response = await fetch(`${API_BASE}/storage/targets`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch targets: ${response.statusText}`);
-      }
-
-      const targets = await response.json();
-      if (Array.isArray(targets)) {
-        this.state.targets = targets;
-        this.log(`Loaded ${this.state.targets.length} targets from storage.json`);
-      } else {
-        throw new Error('Invalid targets data structure');
-      }
+      // Note: Targets are no longer used in the simplified architecture
+      // Connection entries marked as targets are used instead
+      this.state.targets = [];
+      this.log('Targets no longer used - using target connections instead');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.log(`Failed to load targets from storage.json: ${errorMessage}`);
+      this.log(`Note: ${errorMessage}`);
       this.state.targets = [];
     }
   }
 
   private async loadSqlScripts() {
     try {
-      const response = await fetch(`${API_BASE}/storage/scripts`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch scripts: ${response.statusText}`);
+      const result = await window.electronAPI.scripts.getAll();
+      if (!result.success) {
+        throw new Error(`Failed to fetch scripts: ${result.error}`);
       }
 
-      const scripts = await response.json();
+      const scripts = result.data;
       if (Array.isArray(scripts)) {
         this.state.sqlScripts = scripts.map(script => ({
           id: script.id,
@@ -1179,12 +1167,12 @@ class DataReplicatorUI {
 
   private async loadConfigurations() {
     try {
-      const response = await fetch(`${API_BASE}/storage/replication-configs`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch configurations: ${response.statusText}`);
+      const result = await window.electronAPI.configs.getAll();
+      if (!result.success) {
+        throw new Error(`Failed to fetch configurations: ${result.error}`);
       }
 
-      const serverConfigurations = await response.json();
+      const serverConfigurations = result.data;
       if (Array.isArray(serverConfigurations)) {
         // Transform server format to frontend format
         this.state.configurations = serverConfigurations.map(serverConfig => ({
@@ -1233,18 +1221,13 @@ class DataReplicatorUI {
         isTargetDatabase: connection.isTargetDatabase
       };
 
-      const response = await fetch(`${API_BASE}/storage/connections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
+      const result = await window.electronAPI.connections.create(requestData);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const savedConnection = await response.json();
+      const savedConnection = result.data;
       
       // Update local state
       const localConnection = {
@@ -1295,18 +1278,13 @@ class DataReplicatorUI {
         isTargetDatabase: connection.isTargetDatabase
       };
 
-      const response = await fetch(`${API_BASE}/storage/connections/${connectionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
+      const result = await window.electronAPI.connections.update(connectionId, requestData);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const savedConnection = await response.json();
+      const savedConnection = result.data;
       
       // Update local state
       const localConnection = {
@@ -1383,18 +1361,13 @@ class DataReplicatorUI {
         tags: []
       };
 
-      const response = await fetch(`${API_BASE}/storage/scripts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
+      const result = await window.electronAPI.scripts.create(requestData);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const savedScript = await response.json();
+      const savedScript = result.data;
       
       // Update local state
       const localScript = {
@@ -1431,18 +1404,13 @@ class DataReplicatorUI {
         tags: []
       };
 
-      const response = await fetch(`${API_BASE}/storage/scripts/${scriptId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData)
-      });
+      const result = await window.electronAPI.scripts.update(scriptId, requestData);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const updatedScript = await response.json();
+      const updatedScript = result.data;
       
       // Update local state
       const localScript = {
@@ -1482,20 +1450,14 @@ class DataReplicatorUI {
         }
       };
 
-      const response = await fetch(`${API_BASE}/storage/replication-configs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serverConfig)
-      });
+      const result = await window.electronAPI.configs.create(serverConfig);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.log(`Server response status: ${response.status}`);
-        this.log(`Server error response: ${errorText}`);
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        this.log(`Server error: ${result.error}`);
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const savedConfig = await response.json();
+      const savedConfig = result.data;
       
       // Update the config with the server-generated ID and data
       const updatedConfig: StoredConfiguration = {
@@ -1543,21 +1505,18 @@ class DataReplicatorUI {
       };
 
       this.log(`Attempting to update configuration: ${configId}`);
-      this.log(`PUT URL: ${API_BASE}/storage/replication-configs/${configId}`);
       this.log(`PUT body: ${JSON.stringify(serverConfig, null, 2)}`);
       
-      const response = await fetch(`${API_BASE}/storage/replication-configs/${configId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serverConfig)
-      });
+      // Note: Configuration updates are not currently supported in the simplified architecture
+      // For now, we'll delete and recreate the configuration
+      await window.electronAPI.configs.delete(configId);
+      const result = await window.electronAPI.configs.create(serverConfig);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
-      const updatedConfig = await response.json();
+      const updatedConfig = result.data;
       
       // Transform server response back to frontend format
       const frontendConfig: StoredConfiguration = {
@@ -1602,9 +1561,9 @@ class DataReplicatorUI {
 
     try {
       // Fetch the full connection details (decrypted from server)
-      const response = await fetch(`${API_BASE}/storage/connections/${connectionId}`);
-      if (response.ok) {
-        const serverConnection = await response.json();
+      const result = await window.electronAPI.connections.get(connectionId);
+      if (result.success) {
+        const serverConnection = result.data;
         
         // Show modal and populate with decrypted server data
         this.resetConnectionModal();
@@ -1631,8 +1590,7 @@ class DataReplicatorUI {
         
         this.log(`Editing connection "${serverConnection.name}" - please re-enter password for security`);
       } else {
-        const errorText = await response.text();
-        this.showError(`Could not fetch connection details: ${errorText}`);
+        this.showError(`Could not fetch connection details: ${result.error}`);
       }
     } catch (error) {
       this.showError(`Error fetching connection details: ${error instanceof Error ? error.message : String(error)}`);
@@ -1646,13 +1604,10 @@ class DataReplicatorUI {
     if (!confirm(`Are you sure you want to delete the connection "${connection.name}"?`)) return;
 
     try {
-      const response = await fetch(`${API_BASE}/storage/connections/${connectionId}`, {
-        method: 'DELETE'
-      });
+      const result = await window.electronAPI.connections.delete(connectionId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
       // Remove from local state
@@ -1677,13 +1632,10 @@ class DataReplicatorUI {
     if (!confirm(`Are you sure you want to delete the script "${script.name}"?`)) return;
 
     try {
-      const response = await fetch(`${API_BASE}/storage/scripts/${scriptId}`, {
-        method: 'DELETE'
-      });
+      const result = await window.electronAPI.scripts.delete(scriptId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
       // Remove from local state
@@ -1747,15 +1699,11 @@ class DataReplicatorUI {
 
     try {
       this.log(`Attempting to delete configuration: ${configId}`);
-      this.log(`DELETE URL: ${API_BASE}/storage/replication-configs/${configId}`);
       
-      const response = await fetch(`${API_BASE}/storage/replication-configs/${configId}`, {
-        method: 'DELETE'
-      });
+      const result = await window.electronAPI.configs.delete(configId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
+      if (!result.success) {
+        throw new Error(`Server error: ${result.error}`);
       }
 
       // Update local state
