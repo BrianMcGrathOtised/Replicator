@@ -1,27 +1,29 @@
 # Local Data Replicator
 
-A TypeScript-based Electron application for replicating MS SQL Server and Azure SQL databases locally.
+A self-contained TypeScript-based Electron desktop application for replicating MS SQL Server and Azure SQL databases locally.
 
 ## Architecture
 
-This project consists of two main components:
-- **Electron App** (`electron-app/`): TypeScript-based desktop application UI
-- **Express Server** (`server/`): TypeScript Node.js backend handling database operations
+This is a standalone Electron application with direct database connectivity:
+- **Electron App** (`electron-app/`): Self-contained desktop application
+  - **Main Process**: Handles database operations, storage, and business logic
+  - **Renderer Process**: User interface and presentation layer
+  - **Preload Scripts**: Secure communication bridge between main and renderer
 
 ## Prerequisites
 
 - Node.js 18 or higher
 - npm or yarn
-- SQL Server
+- SQL Server (for target database)
 
 ## Quick Start
 
-1. Install all dependencies:
+1. Install dependencies:
    ```bash
    npm run install:all
    ```
 
-2. Start development servers:
+2. Start development:
    ```bash
    npm run dev
    ```
@@ -31,55 +33,54 @@ This project consists of two main components:
    npm run build
    ```
 
+4. Package application:
+   ```bash
+   npm run package
+   ```
+
 ## Project Structure
 
 ```
-├── electron-app/          # Electron TypeScript application
+├── electron-app/          # Standalone Electron application
 │   ├── src/
-│   │   ├── main/         # Main process
-│   │   ├── renderer/     # Renderer process
-│   │   └── preload/      # Preload scripts
+│   │   ├── main/         # Main process (database operations, storage)
+│   │   │   ├── services/ # Business logic and database services
+│   │   │   ├── utils/    # Encryption, logging utilities
+│   │   │   └── types/    # TypeScript type definitions
+│   │   ├── renderer/     # Renderer process (UI)
+│   │   └── preload/      # IPC communication bridge
 │   └── package.json
-├── server/               # Express TypeScript server
-│   ├── src/
-│   │   ├── routes/       # API routes
-│   │   ├── services/     # Business logic
-│   │   └── types/        # TypeScript types
-│   └── package.json
-└── package.json          # Root workspace configuration
+└── package.json          # Root project configuration
 ```
 
 ## Features
 
-- ✅ Secure connection to MS SQL Server and Azure SQL Database
+- ✅ Direct connection to MS SQL Server and Azure SQL Database
+- ✅ Self-contained application with no external server dependencies
+- ✅ Encrypted local storage for connection information
 - ✅ Full schema and data replication to local database
 - ✅ Post-import configuration script execution
-- ✅ Cross-platform desktop UI
-- ✅ TypeScript throughout the stack
-- ✅ Local SQL Server
+- ✅ Cross-platform desktop application (Windows, macOS, Linux)
+- ✅ Secure IPC communication between processes
+- ✅ TypeScript throughout the application
 
 ## Development
 
-Each component can be developed independently:
-
-### Electron App
 ```bash
 cd electron-app
 npm run dev
 ```
 
-### Express Server
-```bash
-cd server
-npm run dev
-```
+This will start the Electron application in development mode with hot reloading.
 
 ## Security
 
-- Connection strings are input-only and never stored
-- Secure encrypted connections recommended
-- Local databases are user-accessible with optional encryption
-- Sandboxed Electron environment
+- ✅ Connection credentials are encrypted using AES-256-CBC
+- ✅ Local storage uses secure file-based encryption
+- ✅ Sandboxed Electron renderer environment
+- ✅ Secure IPC communication between main and renderer processes
+- ✅ No network server exposure - completely offline operation
+- ✅ Connection strings are encrypted at rest
 
 ## License
 

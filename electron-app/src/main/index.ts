@@ -2,8 +2,9 @@ import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import * as path from 'path';
 // Simple development detection
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-import { ChildProcess } from 'child_process';
 import log from 'electron-log';
+import { storageService } from './services/StorageService';
+import { replicationService } from './services/ReplicationService';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -11,7 +12,6 @@ log.transports.console.level = 'debug';
 
 class DataReplicatorApp {
   private mainWindow: BrowserWindow | null = null;
-  private serverProcess: ChildProcess | null = null;
 
   constructor() {
     this.initializeApp();
@@ -24,7 +24,6 @@ class DataReplicatorApp {
       Menu.setApplicationMenu(null);
       
       this.createMainWindow();
-      this.startBackendServer();
       this.setupIpcHandlers();
     });
 
@@ -93,11 +92,7 @@ class DataReplicatorApp {
     });
   }
 
-  private startBackendServer(): void {
-    log.info('Skipping backend server startup - assuming it is already running');
-    // The backend server should be started separately via npm run dev:server
-    // This avoids port conflicts and makes debugging easier
-  }
+  // Removed server startup - now using direct IPC communication
 
   private setupIpcHandlers(): void {
     // Handle file selection
@@ -136,15 +131,172 @@ class DataReplicatorApp {
         nodeVersion: process.versions.node
       };
     });
+
+    // Connection management IPC handlers
+    ipcMain.handle('connections:get-all', async () => {
+      try {
+        return { success: true, data: await storageService.getConnections() };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('connections:get', async (_, id: string) => {
+      try {
+        return { success: true, data: await storageService.getConnection(id) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('connections:create', async (_, request) => {
+      try {
+        return { success: true, data: await storageService.createConnection(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('connections:update', async (_, id: string, request) => {
+      try {
+        return { success: true, data: await storageService.updateConnection(id, request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('connections:delete', async (_, id: string) => {
+      try {
+        await storageService.deleteConnection(id);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Script management IPC handlers
+    ipcMain.handle('scripts:get-all', async () => {
+      try {
+        return { success: true, data: await storageService.getScripts() };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('scripts:get', async (_, id: string) => {
+      try {
+        return { success: true, data: await storageService.getScript(id) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('scripts:create', async (_, request) => {
+      try {
+        return { success: true, data: await storageService.createScript(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('scripts:update', async (_, id: string, request) => {
+      try {
+        return { success: true, data: await storageService.updateScript(id, request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('scripts:delete', async (_, id: string) => {
+      try {
+        await storageService.deleteScript(id);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Replication config management IPC handlers
+    ipcMain.handle('configs:get-all', async () => {
+      try {
+        return { success: true, data: await storageService.getReplicationConfigs() };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('configs:get', async (_, id: string) => {
+      try {
+        return { success: true, data: await storageService.getReplicationConfig(id) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('configs:create', async (_, request) => {
+      try {
+        return { success: true, data: await storageService.createReplicationConfig(request) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('configs:delete', async (_, id: string) => {
+      try {
+        await storageService.deleteReplicationConfig(id);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Replication operation IPC handlers
+    ipcMain.handle('replication:test-connection', async (_, connectionString: string) => {
+      try {
+        return { success: true, data: await replicationService.testConnection(connectionString) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('replication:test-stored-connection', async (_, connectionId: string) => {
+      try {
+        return { success: true, data: await replicationService.testStoredConnection(connectionId) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('replication:start-stored', async (_, request: { configId: string }) => {
+      try {
+        const jobId = await replicationService.startStoredReplication(request);
+        return { success: true, data: { jobId } };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('replication:get-status', async (_, jobId: string) => {
+      try {
+        return { success: true, data: await replicationService.getReplicationStatus(jobId) };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('replication:cancel', async (_, jobId: string) => {
+      try {
+        await replicationService.cancelReplication(jobId);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
   }
 
   private cleanup(): void {
     log.info('Cleaning up application');
-
-    if (this.serverProcess) {
-      this.serverProcess.kill();
-      this.serverProcess = null;
-    }
+    // No server process to clean up anymore
   }
 }
 

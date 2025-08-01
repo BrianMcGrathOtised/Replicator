@@ -1,31 +1,30 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { app } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
 import { encryptionService } from '../utils/encryption';
 import { logger } from '../utils/logger';
-import { CustomError } from '../middleware/errorHandler';
 import {
   StorageData,
   StoredConnection,
   StoredScript,
-  StoredTarget,
   StoredReplicationConfig,
   ConnectionInfo,
   CreateConnectionRequest,
   UpdateConnectionRequest,
   CreateScriptRequest,
   UpdateScriptRequest,
-  CreateTargetRequest,
-  UpdateTargetRequest,
   CreateReplicationConfigRequest
 } from '../types/storage';
 
-export class SecureStorageService {
+export class StorageService {
   private dataFilePath: string;
   private data: StorageData;
 
   constructor() {
-    const dataDir = path.join(process.cwd(), 'data');
+    // Use app.getPath for user data directory
+    const userDataPath = app.getPath('userData');
+    const dataDir = path.join(userDataPath, 'data');
     this.dataFilePath = path.join(dataDir, 'storage.json');
     this.data = this.loadData();
   }
@@ -46,12 +45,6 @@ export class SecureStorageService {
         // Convert date strings back to Date objects
         this.convertDatesFromStorage(parsedData);
         
-        // Migrate legacy connection string format if needed
-        const migrated = this.migrateLegacyConnections(parsedData);
-        if (migrated) {
-          logger.info('Migrated legacy connection format to new structure');
-        }
-        
         logger.info('Loaded storage data', { 
           connections: parsedData.connections.length,
           scripts: parsedData.scripts.length,
@@ -66,7 +59,7 @@ export class SecureStorageService {
           scripts: [],
           targets: [],
           replicationConfigs: [],
-          version: '1.0.0',
+          version: '2.0.0',
           lastModified: new Date()
         };
         this.saveData(defaultData);
@@ -75,7 +68,7 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to load storage data', { error: errorMessage });
-      throw new CustomError('Failed to initialize secure storage', 500);
+      throw new Error('Failed to initialize storage');
     }
   }
 
@@ -91,7 +84,7 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to save storage data', { error: errorMessage });
-      throw new CustomError('Failed to save data to secure storage', 500);
+      throw new Error('Failed to save data to storage');
     }
   }
 
@@ -153,106 +146,12 @@ export class SecureStorageService {
       parts.push('Connection Timeout=30');
     } else {
       // SQL Server on-premises defaults
-      parts.push('Encrypt=False'); // Can be overridden if needed
+      parts.push('Encrypt=False');
       parts.push('TrustServerCertificate=True');
       parts.push('Connection Timeout=30');
     }
     
     return parts.join(';');
-  }
-
-  private migrateLegacyConnections(data: any): boolean {
-    let migrated = false;
-    
-    if (data.connections && Array.isArray(data.connections)) {
-      for (const conn of data.connections) {
-        // Check if this is a legacy connection with connectionString
-        if (conn.connectionString && !conn.server) {
-          try {
-            // Decrypt the old connection string
-            const decryptedConnectionString = encryptionService.decrypt(conn.connectionString);
-            
-            // Parse the connection string to extract components
-            const components = this.parseConnectionStringForMigration(decryptedConnectionString);
-            
-            if (components.server && components.username && components.password && components.database) {
-              // Update the connection object with new structure
-              conn.server = encryptionService.encrypt(components.server);
-              conn.username = encryptionService.encrypt(components.username);
-              conn.password = encryptionService.encrypt(components.password);
-              conn.database = encryptionService.encrypt(components.database);
-              if (components.port) {
-                conn.port = components.port;
-              }
-              
-              // Remove the old connectionString field
-              delete conn.connectionString;
-              
-              migrated = true;
-              logger.info('Migrated legacy connection', { id: conn.id, name: conn.name });
-            }
-          } catch (error) {
-            logger.warn('Failed to migrate connection, keeping as-is', { id: conn.id, error: error instanceof Error ? error.message : String(error) });
-          }
-        }
-      }
-    }
-    
-    // Save if migrated
-    if (migrated) {
-      this.saveData(data);
-    }
-    
-    return migrated;
-  }
-
-  private parseConnectionStringForMigration(connectionString: string): {
-    server?: string;
-    username?: string;
-    password?: string;
-    database?: string;
-    port?: number;
-  } {
-    const result: any = {};
-    
-    try {
-      const pairs = connectionString.split(';').filter(pair => pair.trim());
-      
-      for (const pair of pairs) {
-        const [key, value] = pair.split('=').map(s => s.trim());
-        if (!key || !value) continue;
-        
-        switch (key.toLowerCase()) {
-          case 'server':
-          case 'data source':
-            // Handle server with port format like "server,port"
-            if (value.includes(',')) {
-              const [server, port] = value.split(',');
-              result.server = server.trim();
-              result.port = parseInt(port.trim(), 10);
-            } else {
-              result.server = value;
-            }
-            break;
-          case 'database':
-          case 'initial catalog':
-            result.database = value;
-            break;
-          case 'user id':
-          case 'uid':
-            result.username = value;
-            break;
-          case 'password':
-          case 'pwd':
-            result.password = value;
-            break;
-        }
-      }
-    } catch (error) {
-      logger.warn('Failed to parse connection string for migration', { error: error instanceof Error ? error.message : String(error) });
-    }
-    
-    return result;
   }
 
   // Connection management
@@ -303,7 +202,7 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to create connection', { error: errorMessage });
-      throw new CustomError('Failed to create connection', 500);
+      throw new Error('Failed to create connection');
     }
   }
 
@@ -333,14 +232,14 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to get connections', { error: errorMessage });
-      throw new CustomError('Failed to retrieve connections', 500);
+      throw new Error('Failed to retrieve connections');
     }
   }
 
   async getConnection(id: string): Promise<ConnectionInfo> {
     const connection = this.data.connections.find(c => c.id === id);
     if (!connection) {
-      throw new CustomError('Connection not found', 404);
+      throw new Error('Connection not found');
     }
     
     try {
@@ -365,14 +264,14 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to decrypt connection', { error: errorMessage, id });
-      throw new CustomError('Failed to retrieve connection', 500);
+      throw new Error('Failed to retrieve connection');
     }
   }
 
   async getConnectionString(id: string): Promise<string> {
     const connection = this.data.connections.find(c => c.id === id);
     if (!connection) {
-      throw new CustomError('Connection not found', 404);
+      throw new Error('Connection not found');
     }
     
     try {
@@ -399,14 +298,14 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to build connection string', { error: errorMessage, id });
-      throw new CustomError('Failed to retrieve connection string', 500);
+      throw new Error('Failed to retrieve connection string');
     }
   }
 
   async updateConnection(id: string, request: UpdateConnectionRequest): Promise<ConnectionInfo> {
     const connection = this.data.connections.find(c => c.id === id);
     if (!connection) {
-      throw new CustomError('Connection not found', 404);
+      throw new Error('Connection not found');
     }
     
     try {
@@ -448,22 +347,22 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to update connection', { error: errorMessage, id });
-      throw new CustomError('Failed to update connection', 500);
+      throw new Error('Failed to update connection');
     }
   }
 
   async deleteConnection(id: string): Promise<void> {
     const index = this.data.connections.findIndex(c => c.id === id);
     if (index === -1) {
-      throw new CustomError('Connection not found', 404);
+      throw new Error('Connection not found');
     }
     
     // Check if connection is used by any targets or replication configs
     const usedByTargets = this.data.targets.some(t => t.configuration.connectionId === id);
-    const usedByConfigs = this.data.replicationConfigs.some(c => c.sourceConnectionId === id);
+    const usedByConfigs = this.data.replicationConfigs.some(c => c.sourceConnectionId === id || c.targetId === id);
     
     if (usedByTargets || usedByConfigs) {
-      throw new CustomError('Connection is in use by targets or replication configurations', 400);
+      throw new Error('Connection is in use by targets or replication configurations');
     }
     
     this.data.connections.splice(index, 1);
@@ -497,7 +396,7 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to create script', { error: errorMessage });
-      throw new CustomError('Failed to create script', 500);
+      throw new Error('Failed to create script');
     }
   }
 
@@ -508,7 +407,7 @@ export class SecureStorageService {
   async getScript(id: string): Promise<StoredScript> {
     const script = this.data.scripts.find(s => s.id === id);
     if (!script) {
-      throw new CustomError('Script not found', 404);
+      throw new Error('Script not found');
     }
     return { ...script };
   }
@@ -516,7 +415,7 @@ export class SecureStorageService {
   async updateScript(id: string, request: UpdateScriptRequest): Promise<StoredScript> {
     const script = this.data.scripts.find(s => s.id === id);
     if (!script) {
-      throw new CustomError('Script not found', 404);
+      throw new Error('Script not found');
     }
     
     if (request.name) script.name = request.name;
@@ -535,113 +434,19 @@ export class SecureStorageService {
   async deleteScript(id: string): Promise<void> {
     const index = this.data.scripts.findIndex(s => s.id === id);
     if (index === -1) {
-      throw new CustomError('Script not found', 404);
+      throw new Error('Script not found');
     }
     
     // Check if script is used by any replication configs
     const usedByConfigs = this.data.replicationConfigs.some(c => c.configScriptIds.includes(id));
     if (usedByConfigs) {
-      throw new CustomError('Script is in use by replication configurations', 400);
+      throw new Error('Script is in use by replication configurations');
     }
     
     this.data.scripts.splice(index, 1);
     this.saveData();
     
     logger.info('Script deleted', { id });
-  }
-
-  // Target management
-  async createTarget(request: CreateTargetRequest): Promise<StoredTarget> {
-    try {
-      const id = uuidv4();
-      const now = new Date();
-      
-      // Validate connection reference if provided
-      if (request.configuration.connectionId) {
-        const connectionExists = this.data.connections.some(c => c.id === request.configuration.connectionId);
-        if (!connectionExists) {
-          throw new CustomError('Referenced connection not found', 400);
-        }
-      }
-      
-      const target: StoredTarget = {
-        id,
-        name: request.name,
-        ...(request.description && { description: request.description }),
-        targetType: request.targetType,
-        configuration: request.configuration,
-        createdAt: now,
-        updatedAt: now
-      };
-      
-      this.data.targets.push(target);
-      this.saveData();
-      
-      logger.info('Target created', { id, name: request.name });
-      return target;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to create target', { error: errorMessage });
-      throw new CustomError('Failed to create target', 500);
-    }
-  }
-
-  async getTargets(): Promise<StoredTarget[]> {
-    return [...this.data.targets];
-  }
-
-  async getTarget(id: string): Promise<StoredTarget> {
-    const target = this.data.targets.find(t => t.id === id);
-    if (!target) {
-      throw new CustomError('Target not found', 404);
-    }
-    return { ...target };
-  }
-
-  async updateTarget(id: string, request: UpdateTargetRequest): Promise<StoredTarget> {
-    const target = this.data.targets.find(t => t.id === id);
-    if (!target) {
-      throw new CustomError('Target not found', 404);
-    }
-    
-    // Validate connection reference if provided
-    if (request.configuration?.connectionId) {
-      const connectionExists = this.data.connections.some(c => c.id === request.configuration!.connectionId);
-      if (!connectionExists) {
-        throw new CustomError('Referenced connection not found', 400);
-      }
-    }
-    
-    if (request.name) target.name = request.name;
-    if (request.description !== undefined) target.description = request.description;
-    if (request.targetType) target.targetType = request.targetType;
-    if (request.configuration) {
-      target.configuration = { ...target.configuration, ...request.configuration };
-    }
-    target.updatedAt = new Date();
-    
-    this.saveData();
-    
-    logger.info('Target updated', { id, name: target.name });
-    return { ...target };
-  }
-
-  async deleteTarget(id: string): Promise<void> {
-    const index = this.data.targets.findIndex(t => t.id === id);
-    if (index === -1) {
-      throw new CustomError('Target not found', 404);
-    }
-    
-    // Check if target is used by any replication configs
-    const usedByConfigs = this.data.replicationConfigs.some(c => c.targetId === id);
-    if (usedByConfigs) {
-      throw new CustomError('Target is in use by replication configurations', 400);
-    }
-    
-    this.data.targets.splice(index, 1);
-    this.saveData();
-    
-    logger.info('Target deleted', { id });
   }
 
   // Replication config management
@@ -653,24 +458,22 @@ export class SecureStorageService {
       // Validate references
       const sourceConnection = this.data.connections.find(c => c.id === request.sourceConnectionId);
       if (!sourceConnection) {
-        throw new CustomError('Source connection not found', 400);
+        throw new Error('Source connection not found');
       }
       
-      // targetId now refers to a connection ID (marked as target database)
       const targetConnection = this.data.connections.find(c => c.id === request.targetId);
       if (!targetConnection) {
-        throw new CustomError('Target connection not found', 400);
+        throw new Error('Target connection not found');
       }
       
-      // Verify the target connection is marked as a target database
       if (!targetConnection.isTargetDatabase) {
-        throw new CustomError('Connection is not marked as a target database', 400);
+        throw new Error('Connection is not marked as a target database');
       }
       
       for (const scriptId of request.configScriptIds) {
         const script = this.data.scripts.find(s => s.id === scriptId);
         if (!script) {
-          throw new CustomError(`Script with ID ${scriptId} not found`, 400);
+          throw new Error(`Script with ID ${scriptId} not found`);
         }
       }
       
@@ -694,7 +497,7 @@ export class SecureStorageService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Failed to create replication config', { error: errorMessage });
-      throw new CustomError('Failed to create replication config', 500);
+      throw new Error('Failed to create replication config');
     }
   }
 
@@ -705,72 +508,15 @@ export class SecureStorageService {
   async getReplicationConfig(id: string): Promise<StoredReplicationConfig> {
     const config = this.data.replicationConfigs.find(c => c.id === id);
     if (!config) {
-      throw new CustomError('Replication config not found', 404);
+      throw new Error('Replication config not found');
     }
     return { ...config };
-  }
-
-  async updateReplicationConfig(id: string, request: CreateReplicationConfigRequest): Promise<StoredReplicationConfig> {
-    try {
-      const config = this.data.replicationConfigs.find(c => c.id === id);
-      if (!config) {
-        throw new CustomError('Replication config not found', 404);
-      }
-      
-      // Validate references if they changed
-      if (request.sourceConnectionId !== config.sourceConnectionId) {
-        const sourceConnection = this.data.connections.find(c => c.id === request.sourceConnectionId);
-        if (!sourceConnection) {
-          throw new CustomError('Source connection not found', 400);
-        }
-      }
-      
-      if (request.targetId !== config.targetId) {
-        // targetId now refers to a connection ID (marked as target database)
-        const targetConnection = this.data.connections.find(c => c.id === request.targetId);
-        if (!targetConnection) {
-          throw new CustomError('Target connection not found', 400);
-        }
-        
-        // Verify the target connection is marked as a target database
-        if (!targetConnection.isTargetDatabase) {
-          throw new CustomError('Connection is not marked as a target database', 400);
-        }
-      }
-      
-      for (const scriptId of request.configScriptIds) {
-        const script = this.data.scripts.find(s => s.id === scriptId);
-        if (!script) {
-          throw new CustomError(`Script with ID ${scriptId} not found`, 400);
-        }
-      }
-      
-      // Update the config
-      config.name = request.name;
-      if (request.description !== undefined) {
-        config.description = request.description;
-      }
-      config.sourceConnectionId = request.sourceConnectionId;
-      config.targetId = request.targetId;
-      config.configScriptIds = request.configScriptIds;
-      config.settings = request.settings;
-      config.updatedAt = new Date();
-      
-      this.saveData();
-      
-      logger.info('Replication config updated', { id, name: request.name });
-      return { ...config };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to update replication config', { error: errorMessage, id });
-      throw new CustomError('Failed to update replication config', 500);
-    }
   }
 
   async updateReplicationConfigLastRun(id: string): Promise<void> {
     const config = this.data.replicationConfigs.find(c => c.id === id);
     if (!config) {
-      throw new CustomError('Replication config not found', 404);
+      throw new Error('Replication config not found');
     }
     
     config.lastRun = new Date();
@@ -780,7 +526,7 @@ export class SecureStorageService {
   async deleteReplicationConfig(id: string): Promise<void> {
     const index = this.data.replicationConfigs.findIndex(c => c.id === id);
     if (index === -1) {
-      throw new CustomError('Replication config not found', 404);
+      throw new Error('Replication config not found');
     }
     
     this.data.replicationConfigs.splice(index, 1);
@@ -791,4 +537,4 @@ export class SecureStorageService {
 }
 
 // Export singleton instance
-export const secureStorageService = new SecureStorageService(); 
+export const storageService = new StorageService();

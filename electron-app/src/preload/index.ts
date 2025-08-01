@@ -14,13 +14,39 @@ interface ElectronAPI {
     nodeVersion: string;
   }>;
   
-  // API communication
-  api: {
+  // Connection management
+  connections: {
+    getAll: () => Promise<any>;
+    get: (id: string) => Promise<any>;
+    create: (request: any) => Promise<any>;
+    update: (id: string, request: any) => Promise<any>;
+    delete: (id: string) => Promise<any>;
+  };
+
+  // Script management
+  scripts: {
+    getAll: () => Promise<any>;
+    get: (id: string) => Promise<any>;
+    create: (request: any) => Promise<any>;
+    update: (id: string, request: any) => Promise<any>;
+    delete: (id: string) => Promise<any>;
+  };
+
+  // Configuration management
+  configs: {
+    getAll: () => Promise<any>;
+    get: (id: string) => Promise<any>;
+    create: (request: any) => Promise<any>;
+    delete: (id: string) => Promise<any>;
+  };
+
+  // Replication operations
+  replication: {
     testConnection: (connectionString: string) => Promise<any>;
-    startReplication: (config: any) => Promise<any>;
-    startStoredReplication: (configId: string) => Promise<any>;
-    getReplicationStatus: (jobId: string) => Promise<any>;
-    cancelReplication: (jobId: string) => Promise<any>;
+    testStoredConnection: (connectionId: string) => Promise<any>;
+    startStored: (request: { configId: string }) => Promise<any>;
+    getStatus: (jobId: string) => Promise<any>;
+    cancel: (jobId: string) => Promise<any>;
   };
 }
 
@@ -31,47 +57,35 @@ const electronAPI: ElectronAPI = {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   
-  api: {
-    testConnection: async (connectionString: string) => {
-      return fetch('http://localhost:3001/api/replication/test-connection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ connectionString })
-      }).then(res => res.json());
-    },
-    
-    startReplication: async (config: any) => {
-      return fetch('http://localhost:3001/api/replication/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(config)
-      }).then(res => res.json());
-    },
-    
-    startStoredReplication: async (configId: string) => {
-      return fetch('http://localhost:3001/api/replication/start-stored', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ configId })
-      }).then(res => res.json());
-    },
-    
-    getReplicationStatus: async (jobId: string) => {
-      return fetch(`http://localhost:3001/api/replication/status/${jobId}`)
-        .then(res => res.json());
-    },
-    
-    cancelReplication: async (jobId: string) => {
-      return fetch(`http://localhost:3001/api/replication/cancel/${jobId}`, {
-        method: 'POST'
-      }).then(res => res.json());
-    }
+  connections: {
+    getAll: () => ipcRenderer.invoke('connections:get-all'),
+    get: (id: string) => ipcRenderer.invoke('connections:get', id),
+    create: (request: any) => ipcRenderer.invoke('connections:create', request),
+    update: (id: string, request: any) => ipcRenderer.invoke('connections:update', id, request),
+    delete: (id: string) => ipcRenderer.invoke('connections:delete', id),
+  },
+
+  scripts: {
+    getAll: () => ipcRenderer.invoke('scripts:get-all'),
+    get: (id: string) => ipcRenderer.invoke('scripts:get', id),
+    create: (request: any) => ipcRenderer.invoke('scripts:create', request),
+    update: (id: string, request: any) => ipcRenderer.invoke('scripts:update', id, request),
+    delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
+  },
+
+  configs: {
+    getAll: () => ipcRenderer.invoke('configs:get-all'),
+    get: (id: string) => ipcRenderer.invoke('configs:get', id),
+    create: (request: any) => ipcRenderer.invoke('configs:create', request),
+    delete: (id: string) => ipcRenderer.invoke('configs:delete', id),
+  },
+
+  replication: {
+    testConnection: (connectionString: string) => ipcRenderer.invoke('replication:test-connection', connectionString),
+    testStoredConnection: (connectionId: string) => ipcRenderer.invoke('replication:test-stored-connection', connectionId),
+    startStored: (request: { configId: string }) => ipcRenderer.invoke('replication:start-stored', request),
+    getStatus: (jobId: string) => ipcRenderer.invoke('replication:get-status', jobId),
+    cancel: (jobId: string) => ipcRenderer.invoke('replication:cancel', jobId),
   }
 };
 
@@ -82,4 +96,4 @@ declare global {
   interface Window {
     electronAPI: ElectronAPI;
   }
-} 
+}

@@ -1,14 +1,16 @@
+// Storage type definitions for the simplified architecture
+
 export interface StoredConnection {
   id: string;
   name: string;
   description?: string;
-  server: string; // Will be encrypted when stored
-  username: string; // Will be encrypted when stored
-  password: string; // Will be encrypted when stored
-  database: string; // Will be encrypted when stored
-  port?: number; // Optional, defaults will be used based on serverType
+  server: string; // encrypted
+  username: string; // encrypted
+  password: string; // encrypted
+  database: string; // encrypted
+  port?: number;
   serverType: 'sqlserver' | 'azure-sql';
-  isTargetDatabase?: boolean; // Whether this connection can be used as a replication target
+  isTargetDatabase?: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastUsed?: Date;
@@ -20,7 +22,7 @@ export interface StoredScript {
   description?: string;
   content: string;
   language: 'sql' | 'javascript' | 'typescript';
-  tags?: string[];
+  tags: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,15 +31,11 @@ export interface StoredTarget {
   id: string;
   name: string;
   description?: string;
-  targetType: 'sqlite' | 'sqlserver';
+  targetType: string;
   configuration: {
-    // For SQLite
-    filePath?: string;
-    // For SQL Server
-    connectionId?: string; // Reference to StoredConnection
-    // Common settings
-    overwriteExisting?: boolean;
-    backupBefore?: boolean;
+    connectionId: string;
+    overwriteExisting: boolean;
+    backupBefore: boolean;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -47,22 +45,28 @@ export interface StoredReplicationConfig {
   id: string;
   name: string;
   description?: string;
-  sourceConnectionId: string; // Reference to StoredConnection
-  targetId: string; // Reference to StoredTarget
-  configScriptIds: string[]; // References to StoredScript
+  sourceConnectionId: string;
+  targetId: string; // connection ID marked as target
+  configScriptIds: string[];
   settings: {
-    includeTables?: string[];
-    excludeTables?: string[];
     includeData?: boolean;
     includeSchema?: boolean;
-    batchSize?: number;
   };
   createdAt: Date;
   updatedAt: Date;
   lastRun?: Date;
 }
 
-// For API responses (decrypted data)
+export interface StorageData {
+  connections: StoredConnection[];
+  scripts: StoredScript[];
+  targets: StoredTarget[];
+  replicationConfigs: StoredReplicationConfig[];
+  version: string;
+  lastModified: Date;
+}
+
+// Request/Response types for IPC communication
 export interface ConnectionInfo {
   id: string;
   name: string;
@@ -78,17 +82,6 @@ export interface ConnectionInfo {
   lastUsed?: Date;
 }
 
-// For secure storage in JSON files
-export interface StorageData {
-  connections: StoredConnection[];
-  scripts: StoredScript[];
-  targets: StoredTarget[];
-  replicationConfigs: StoredReplicationConfig[];
-  version: string;
-  lastModified: Date;
-}
-
-// API request/response types
 export interface CreateConnectionRequest {
   name: string;
   description?: string;
@@ -132,21 +125,19 @@ export interface UpdateScriptRequest {
 export interface CreateTargetRequest {
   name: string;
   description?: string;
-  targetType: 'sqlite' | 'sqlserver';
+  targetType: string;
   configuration: {
-    filePath?: string;
-    connectionId?: string;
-    overwriteExisting?: boolean;
-    backupBefore?: boolean;
+    connectionId: string;
+    overwriteExisting: boolean;
+    backupBefore: boolean;
   };
 }
 
 export interface UpdateTargetRequest {
   name?: string;
   description?: string;
-  targetType?: 'sqlite' | 'sqlserver';
+  targetType?: string;
   configuration?: {
-    filePath?: string;
     connectionId?: string;
     overwriteExisting?: boolean;
     backupBefore?: boolean;
@@ -160,10 +151,7 @@ export interface CreateReplicationConfigRequest {
   targetId: string;
   configScriptIds: string[];
   settings: {
-    includeTables?: string[];
-    excludeTables?: string[];
     includeData?: boolean;
     includeSchema?: boolean;
-    batchSize?: number;
   };
-} 
+}
