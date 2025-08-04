@@ -1,0 +1,91 @@
+{
+  "connections": [
+    {
+      "id": "dev-connection-1",
+      "name": "Development Database",
+      "description": "Main development database server",
+      "server": "encrypted_server_string",
+      "username": "encrypted_username_string",
+      "password": "encrypted_password_string",
+      "database": "encrypted_database_string",
+      "port": 1433,
+      "serverType": "sqlserver",
+      "isTargetDatabase": false,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "staging-connection-1",
+      "name": "Staging Azure SQL",
+      "description": "Azure SQL staging environment",
+      "server": "encrypted_server_string",
+      "username": "encrypted_username_string",
+      "password": "encrypted_password_string",
+      "database": "encrypted_database_string",
+      "serverType": "azure-sql",
+      "isTargetDatabase": false,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "local-target-1",
+      "name": "Local SQL Express",
+      "description": "Local target database for replicated data",
+      "server": "encrypted_localhost_string",
+      "username": "encrypted_empty_string",
+      "password": "encrypted_empty_string",
+      "database": "encrypted_local_db_string",
+      "serverType": "sqlserver",
+      "isTargetDatabase": true,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "sanitize-script-1",
+      "name": "Sanitize User Data",
+      "description": "Remove sensitive user information for development",
+      "content": "-- Sanitize user personal information\nUPDATE Users \nSET \n    Email = CONCAT('user', Id, '@company-dev.local'),\n    Phone = '555-0000',\n    SSN = NULL,\n    CreditCardNumber = NULL\nWHERE IsTestUser = 0;\n\n-- Update environment settings\nUPDATE AppConfig \nSET Value = 'development'\nWHERE Key = 'Environment';",
+      "language": "sql",
+      "tags": ["sanitization", "development"],
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "setup-dev-script-1",
+      "name": "Setup Development Environment",
+      "description": "Configure database for local development",
+      "content": "-- Create development admin user\nIF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@company-dev.local')\nBEGIN\n    INSERT INTO Users (Id, Email, FirstName, LastName, IsTestUser, CreatedAt)\n    VALUES (NEWID(), 'admin@company-dev.local', 'Dev', 'Admin', 1, GETDATE());\nEND\n\n-- Enable debug features\nUPDATE FeatureFlags \nSET IsEnabled = 1\nWHERE Name IN ('DebugMode', 'DeveloperTools');",
+      "language": "sql",
+      "tags": ["setup", "development"],
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "replicationConfigs": [
+    {
+      "id": "dev-to-local-config",
+      "name": "Development to Local",
+      "description": "Replicate development database to local with sanitization",
+      "sourceConnectionId": "dev-connection-1",
+      "targetId": "local-target-1",
+      "configScriptIds": ["sanitize-script-1", "setup-dev-script-1"],
+      "settings": {
+        "includeData": true,
+        "includeSchema": true
+      },
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "metadata": {
+    "exportedAt": "2024-01-01T00:00:00.000Z",
+    "version": "2.0.0",
+    "itemCounts": {
+      "connections": 3,
+      "scripts": 2,
+      "configs": 1
+    }
+  }
+}

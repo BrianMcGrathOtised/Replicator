@@ -5,6 +5,8 @@ interface ElectronAPI {
   // File system operations
   selectFile: () => Promise<string | null>;
   selectDirectory: () => Promise<string | null>;
+  selectConfigFile: () => Promise<string | null>;
+  saveConfigFile: (defaultName?: string) => Promise<string | null>;
   
   // App information
   getAppInfo: () => Promise<{
@@ -48,6 +50,14 @@ interface ElectronAPI {
     getStatus: (jobId: string) => Promise<any>;
     cancel: (jobId: string) => Promise<any>;
   };
+
+  // Configuration import/export
+  config: {
+    export: (options?: any) => Promise<any>;
+    import: (configData: any, options?: any) => Promise<any>;
+    saveToFile: (filePath: string, configData: any) => Promise<any>;
+    loadFromFile: (filePath: string) => Promise<any>;
+  };
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -55,6 +65,8 @@ interface ElectronAPI {
 const electronAPI: ElectronAPI = {
   selectFile: () => ipcRenderer.invoke('select-file'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  selectConfigFile: () => ipcRenderer.invoke('select-config-file'),
+  saveConfigFile: (defaultName?: string) => ipcRenderer.invoke('save-config-file', defaultName),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   
   connections: {
@@ -86,6 +98,13 @@ const electronAPI: ElectronAPI = {
     startStored: (request: { configId: string }) => ipcRenderer.invoke('replication:start-stored', request),
     getStatus: (jobId: string) => ipcRenderer.invoke('replication:get-status', jobId),
     cancel: (jobId: string) => ipcRenderer.invoke('replication:cancel', jobId),
+  },
+
+  config: {
+    export: (options?: any) => ipcRenderer.invoke('config:export', options),
+    import: (configData: any, options?: any) => ipcRenderer.invoke('config:import', configData, options),
+    saveToFile: (filePath: string, configData: any) => ipcRenderer.invoke('config:save-to-file', filePath, configData),
+    loadFromFile: (filePath: string) => ipcRenderer.invoke('config:load-from-file', filePath),
   }
 };
 

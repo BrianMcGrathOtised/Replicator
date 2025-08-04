@@ -122,6 +122,35 @@ class DataReplicatorApp {
       return result.canceled ? null : result.filePaths[0];
     });
 
+    // Configuration file dialogs
+    ipcMain.handle('select-config-file', async () => {
+      if (!this.mainWindow) return null;
+
+      const result = await dialog.showOpenDialog(this.mainWindow, {
+        properties: ['openFile'],
+        filters: [
+          { name: 'JSON Configuration Files', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      return result.canceled ? null : result.filePaths[0];
+    });
+
+    ipcMain.handle('save-config-file', async (_, defaultName?: string) => {
+      if (!this.mainWindow) return null;
+
+      const result = await dialog.showSaveDialog(this.mainWindow, {
+        defaultPath: defaultName || 'replicator-config.json',
+        filters: [
+          { name: 'JSON Configuration Files', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      return result.canceled ? null : result.filePath;
+    });
+
     // Handle app info
     ipcMain.handle('get-app-info', () => {
       return {
@@ -288,6 +317,47 @@ class DataReplicatorApp {
       try {
         await replicationService.cancelReplication(jobId);
         return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Configuration import/export
+    ipcMain.handle('config:export', async (_, options: any) => {
+      try {
+        const configData = await storageService.exportConfiguration(options);
+        return { success: true, data: configData };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('config:import', async (_, configData: any, options: any) => {
+      try {
+        const result = await storageService.importConfiguration(configData, options);
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // File I/O for config files
+    ipcMain.handle('config:save-to-file', async (_, filePath: string, configData: any) => {
+      try {
+        const fs = require('fs').promises;
+        await fs.writeFile(filePath, JSON.stringify(configData, null, 2), 'utf8');
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('config:load-from-file', async (_, filePath: string) => {
+      try {
+        const fs = require('fs').promises;
+        const fileContent = await fs.readFile(filePath, 'utf8');
+        const configData = JSON.parse(fileContent);
+        return { success: true, data: configData };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }

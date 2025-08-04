@@ -534,6 +534,274 @@ export class StorageService {
     
     logger.info('Replication config deleted', { id });
   }
+
+  // Configuration export/import functionality
+  async exportConfiguration(options: {
+    includeConnections?: boolean;
+    includeScripts?: boolean;
+    includeConfigs?: boolean;
+    selectedConnectionIds?: string[];
+    selectedScriptIds?: string[];
+    selectedConfigIds?: string[];
+  } = {}): Promise<{
+    connections: StoredConnection[];
+    scripts: StoredScript[];
+    replicationConfigs: StoredReplicationConfig[];
+    metadata: {
+      exportedAt: Date;
+      version: string;
+      itemCounts: {
+        connections: number;
+        scripts: number;
+        configs: number;
+      };
+    };
+  }> {
+    try {
+      const {
+        includeConnections = true,
+        includeScripts = true,
+        includeConfigs = true,
+        selectedConnectionIds,
+        selectedScriptIds,
+        selectedConfigIds
+      } = options;
+
+      let connections: StoredConnection[] = [];
+      let scripts: StoredScript[] = [];
+      let replicationConfigs: StoredReplicationConfig[] = [];
+
+      // Export connections
+      if (includeConnections) {
+        connections = selectedConnectionIds
+          ? this.data.connections.filter(c => selectedConnectionIds.includes(c.id))
+          : [...this.data.connections];
+      }
+
+      // Export scripts
+      if (includeScripts) {
+        scripts = selectedScriptIds
+          ? this.data.scripts.filter(s => selectedScriptIds.includes(s.id))
+          : [...this.data.scripts];
+      }
+
+      // Export replication configs
+      if (includeConfigs) {
+        replicationConfigs = selectedConfigIds
+          ? this.data.replicationConfigs.filter(r => selectedConfigIds.includes(r.id))
+          : [...this.data.replicationConfigs];
+      }
+
+      const exportData = {
+        connections,
+        scripts,
+        replicationConfigs,
+        metadata: {
+          exportedAt: new Date(),
+          version: this.data.version,
+          itemCounts: {
+            connections: connections.length,
+            scripts: scripts.length,
+            configs: replicationConfigs.length
+          }
+        }
+      };
+
+      logger.info('Configuration exported', {
+        connections: connections.length,
+        scripts: scripts.length,
+        configs: replicationConfigs.length
+      });
+
+      return exportData;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to export configuration', { error: errorMessage });
+      throw new Error('Failed to export configuration');
+    }
+  }
+
+  async importConfiguration(configData: {
+    connections?: StoredConnection[];
+    scripts?: StoredScript[];
+    replicationConfigs?: StoredReplicationConfig[];
+  }, options: {
+    mergeMode?: 'replace' | 'merge' | 'skip-duplicates';
+    generateNewIds?: boolean;
+  } = {}): Promise<{
+    imported: {
+      connections: number;
+      scripts: number;
+      configs: number;
+    };
+    skipped: {
+      connections: number;
+      scripts: number;
+      configs: number;
+    };
+    errors: string[];
+  }> {
+    try {
+      const { mergeMode = 'merge', generateNewIds = true } = options;
+      const result = {
+        imported: { connections: 0, scripts: 0, configs: 0 },
+        skipped: { connections: 0, scripts: 0, configs: 0 },
+        errors: [] as string[]
+      };
+
+      // Helper function to generate new IDs if needed
+      const processItem = <T extends { id: string; name: string }>(item: T): T => {
+        if (generateNewIds) {
+          return { ...item, id: uuidv4() };
+        }
+        return item;
+      };
+
+      // Import connections
+      if (configData.connections) {
+        for (const connection of configData.connections) {
+          try {
+            const existingIndex = this.data.connections.findIndex(c => 
+              c.name === connection.name || (!generateNewIds && c.id === connection.id)
+            );
+
+            if (existingIndex >= 0) {
+              if (mergeMode === 'replace') {
+                this.data.connections[existingIndex] = processItem({
+                  ...connection,
+                  updatedAt: new Date()
+                });
+                result.imported.connections++;
+              } else if (mergeMode === 'skip-duplicates') {
+                result.skipped.connections++;
+              } else { // merge mode
+                // Update existing connection
+                this.data.connections[existingIndex] = processItem({
+                  ...this.data.connections[existingIndex],
+                  ...connection,
+                  updatedAt: new Date()
+                });
+                result.imported.connections++;
+              }
+            } else {
+              // Add new connection
+              this.data.connections.push(processItem({
+                ...connection,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }));
+              result.imported.connections++;
+            }
+          } catch (error) {
+            const errorMsg = `Failed to import connection "${connection.name}": ${error instanceof Error ? error.message : String(error)}`;
+            result.errors.push(errorMsg);
+            logger.warn(errorMsg);
+          }
+        }
+      }
+
+      // Import scripts
+      if (configData.scripts) {
+        for (const script of configData.scripts) {
+          try {
+            const existingIndex = this.data.scripts.findIndex(s => 
+              s.name === script.name || (!generateNewIds && s.id === script.id)
+            );
+
+            if (existingIndex >= 0) {
+              if (mergeMode === 'replace') {
+                this.data.scripts[existingIndex] = processItem({
+                  ...script,
+                  updatedAt: new Date()
+                });
+                result.imported.scripts++;
+              } else if (mergeMode === 'skip-duplicates') {
+                result.skipped.scripts++;
+              } else { // merge mode
+                this.data.scripts[existingIndex] = processItem({
+                  ...this.data.scripts[existingIndex],
+                  ...script,
+                  updatedAt: new Date()
+                });
+                result.imported.scripts++;
+              }
+            } else {
+              // Add new script
+              this.data.scripts.push(processItem({
+                ...script,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }));
+              result.imported.scripts++;
+            }
+          } catch (error) {
+            const errorMsg = `Failed to import script "${script.name}": ${error instanceof Error ? error.message : String(error)}`;
+            result.errors.push(errorMsg);
+            logger.warn(errorMsg);
+          }
+        }
+      }
+
+      // Import replication configs
+      if (configData.replicationConfigs) {
+        for (const config of configData.replicationConfigs) {
+          try {
+            const existingIndex = this.data.replicationConfigs.findIndex(r => 
+              r.name === config.name || (!generateNewIds && r.id === config.id)
+            );
+
+            if (existingIndex >= 0) {
+              if (mergeMode === 'replace') {
+                this.data.replicationConfigs[existingIndex] = processItem({
+                  ...config,
+                  updatedAt: new Date()
+                });
+                result.imported.configs++;
+              } else if (mergeMode === 'skip-duplicates') {
+                result.skipped.configs++;
+              } else { // merge mode
+                this.data.replicationConfigs[existingIndex] = processItem({
+                  ...this.data.replicationConfigs[existingIndex],
+                  ...config,
+                  updatedAt: new Date()
+                });
+                result.imported.configs++;
+              }
+            } else {
+              // Add new config
+              this.data.replicationConfigs.push(processItem({
+                ...config,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              }));
+              result.imported.configs++;
+            }
+          } catch (error) {
+            const errorMsg = `Failed to import config "${config.name}": ${error instanceof Error ? error.message : String(error)}`;
+            result.errors.push(errorMsg);
+            logger.warn(errorMsg);
+          }
+        }
+      }
+
+      // Save changes if any imports were successful
+      if (result.imported.connections > 0 || result.imported.scripts > 0 || result.imported.configs > 0) {
+        this.saveData();
+      }
+
+      logger.info('Configuration imported', {
+        imported: result.imported,
+        skipped: result.skipped,
+        errors: result.errors.length
+      });
+
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Failed to import configuration', { error: errorMessage });
+      throw new Error('Failed to import configuration');
+    }
+  }
 }
 
 // Export singleton instance
