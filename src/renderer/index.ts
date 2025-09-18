@@ -6,6 +6,8 @@ declare global {
     electronAPI: {
       selectFile: () => Promise<string | null>;
       selectDirectory: () => Promise<string | null>;
+      selectConfigFile: () => Promise<string | null>;
+      saveConfigFile: (defaultName?: string) => Promise<string | null>;
       getAppInfo: () => Promise<{
         name: string;
         version: string;
@@ -38,6 +40,12 @@ declare global {
         startStored: (request: { configId: string }) => Promise<any>;
         getStatus: (jobId: string) => Promise<any>;
         cancel: (jobId: string) => Promise<any>;
+      };
+      config: {
+        export: (options?: any) => Promise<any>;
+        import: (configData: any, options?: any) => Promise<any>;
+        saveToFile: (filePath: string, configData: any) => Promise<any>;
+        loadFromFile: (filePath: string) => Promise<any>;
       };
     };
   }
@@ -136,6 +144,29 @@ class DataReplicatorUI {
     appInfo: document.getElementById('appInfo') as HTMLSpanElement,
     connectionStatus: document.getElementById('connectionStatus') as HTMLSpanElement,
     loadingOverlay: document.getElementById('loadingOverlay') as HTMLDivElement,
+    
+    // Settings
+    settingsBtn: document.getElementById('settingsBtn') as HTMLButtonElement,
+    settingsModal: document.getElementById('settingsModal') as HTMLDivElement,
+    settingsModalCloseBtn: document.getElementById('settingsModalCloseBtn') as HTMLButtonElement,
+    settingsModalCloseBtn2: document.getElementById('settingsModalCloseBtn2') as HTMLButtonElement,
+    settingsTabButtons: document.querySelectorAll('.settings-tab-button'),
+    settingsTabContents: document.querySelectorAll('.settings-tab-content'),
+    exportConnections: document.getElementById('exportConnections') as HTMLInputElement,
+    exportScripts: document.getElementById('exportScripts') as HTMLInputElement,
+    exportConfigs: document.getElementById('exportConfigs') as HTMLInputElement,
+    exportBtn: document.getElementById('exportBtn') as HTMLButtonElement,
+    importMode: document.getElementById('importMode') as HTMLSelectElement,
+    generateNewIds: document.getElementById('generateNewIds') as HTMLInputElement,
+    importBtn: document.getElementById('importBtn') as HTMLButtonElement,
+    appVersion: document.getElementById('appVersion') as HTMLSpanElement,
+    
+    // Import Preview Modal
+    importPreviewModal: document.getElementById('importPreviewModal') as HTMLDivElement,
+    importPreviewModalCloseBtn: document.getElementById('importPreviewModalCloseBtn') as HTMLButtonElement,
+    importPreviewCancelBtn: document.getElementById('importPreviewCancelBtn') as HTMLButtonElement,
+    importPreviewConfirmBtn: document.getElementById('importPreviewConfirmBtn') as HTMLButtonElement,
+    importPreviewContent: document.getElementById('importPreviewContent') as HTMLDivElement,
     
     // Connection Modal
     connectionModal: document.getElementById('connectionModal') as HTMLDivElement,
@@ -280,6 +311,29 @@ class DataReplicatorUI {
     this.elements.sourceConnection.addEventListener('change', () => this.onSourceConnectionChange());
     this.elements.targetConnection.addEventListener('change', () => this.onTargetConnectionChange());
     
+    // Settings Modal
+    this.elements.settingsBtn.addEventListener('click', () => this.showSettingsModal());
+    this.elements.settingsModalCloseBtn.addEventListener('click', () => this.hideSettingsModal());
+    this.elements.settingsModalCloseBtn2.addEventListener('click', () => this.hideSettingsModal());
+    this.elements.exportBtn.addEventListener('click', () => this.exportConfiguration());
+    this.elements.importBtn.addEventListener('click', () => this.importConfiguration());
+    
+    // Settings tab management
+    this.elements.settingsTabButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const target = e.target as HTMLButtonElement;
+        const tabName = target.getAttribute('data-tab');
+        if (tabName) {
+          this.switchSettingsTab(tabName);
+        }
+      });
+    });
+    
+    // Import Preview Modal
+    this.elements.importPreviewModalCloseBtn.addEventListener('click', () => this.hideImportPreviewModal());
+    this.elements.importPreviewCancelBtn.addEventListener('click', () => this.hideImportPreviewModal());
+    this.elements.importPreviewConfirmBtn.addEventListener('click', () => this.confirmImport());
+    
     // Prevent form submission from interfering with input
     const configForm = document.getElementById('configForm') as HTMLFormElement;
     if (configForm) {
@@ -292,7 +346,8 @@ class DataReplicatorUI {
 
     
     // Modal click outside to close
-    [this.elements.connectionModal, this.elements.sqlScriptModal, this.elements.configModal].forEach(modal => {
+    [this.elements.connectionModal, this.elements.sqlScriptModal, this.elements.configModal, 
+     this.elements.settingsModal, this.elements.importPreviewModal].forEach(modal => {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {
           this.hideAllModals();
@@ -1705,11 +1760,272 @@ class DataReplicatorUI {
     }
   }
 
+  // Settings Modal Methods
+  private async showSettingsModal() {
+    this.elements.settingsModal.style.display = 'flex';
+    // Load app version
+    try {
+      const appInfo = await window.electronAPI.getAppInfo();
+      this.elements.appVersion.textContent = `${appInfo.name} v${appInfo.version}`;
+    } catch (error) {
+      this.elements.appVersion.textContent = 'Unknown';
+    }
+  }
+
+  private hideSettingsModal() {
+    this.elements.settingsModal.style.display = 'none';
+  }
+
+  private switchSettingsTab(tabName: string) {
+    this.elements.settingsTabButtons.forEach(button => {
+      if (button.getAttribute('data-tab') === tabName) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
+
+    this.elements.settingsTabContents.forEach(content => {
+      if (content.id === `${tabName}-tab`) {
+        content.classList.add('active');
+      } else {
+        content.classList.remove('active');
+      }
+    });
+  }
+
+  private async exportConfiguration() {
+    try {
+      const exportOptions = {
+        includeConnections: this.elements.exportConnections.checked,
+        includeScripts: this.elements.exportScripts.checked,
+        includeConfigs: this.elements.exportConfigs.checked
+      };
+
+      // Get the configuration data
+      const result = await window.electronAPI.config.export(exportOptions);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      const configData = result.data;
+      
+      // Show save dialog
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+      const defaultName = `replicator-config-${timestamp}.json`;
+      const filePath = await window.electronAPI.saveConfigFile(defaultName);
+      
+      if (filePath) {
+        // Save to file
+        const saveResult = await window.electronAPI.config.saveToFile(filePath, configData);
+        if (!saveResult.success) {
+          throw new Error(saveResult.error);
+        }
+
+        this.log(`Configuration exported successfully to: ${filePath}`);
+        this.log(`Exported ${configData.metadata.itemCounts.connections} connections, ${configData.metadata.itemCounts.scripts} scripts, ${configData.metadata.itemCounts.configs} configurations`);
+      }
+    } catch (error) {
+      this.showError(`Failed to export configuration: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async importConfiguration() {
+    try {
+      // Show file selection dialog
+      const filePath = await window.electronAPI.selectConfigFile();
+      if (!filePath) return;
+
+      // Load configuration from file
+      const loadResult = await window.electronAPI.config.loadFromFile(filePath);
+      if (!loadResult.success) {
+        throw new Error(loadResult.error);
+      }
+
+      const configData = loadResult.data;
+      
+      // Validate the configuration data
+      if (!configData || typeof configData !== 'object') {
+        throw new Error('Invalid configuration file format');
+      }
+
+      // Store the configuration data for later import
+      (this.elements.importPreviewModal as any).pendingImportData = configData;
+      
+      // Show preview modal
+      this.showImportPreviewModal(configData);
+      
+    } catch (error) {
+      this.showError(`Failed to load configuration file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private showImportPreviewModal(configData: any) {
+    // Generate preview content
+    const previewHTML = this.generateImportPreview(configData);
+    this.elements.importPreviewContent.innerHTML = previewHTML;
+    this.elements.importPreviewModal.style.display = 'flex';
+  }
+
+  private hideImportPreviewModal() {
+    this.elements.importPreviewModal.style.display = 'none';
+    (this.elements.importPreviewModal as any).pendingImportData = null;
+  }
+
+  private generateImportPreview(configData: any): string {
+    const mergeMode = this.elements.importMode.value;
+    const generateNewIds = this.elements.generateNewIds.checked;
+
+    let html = '<div class="import-summary">';
+    html += '<h5>Import Summary</h5>';
+    html += '<div class="import-summary-stats">';
+    
+    if (configData.connections) {
+      html += `<div class="import-summary-stat">
+        <div class="import-summary-stat-value">${configData.connections.length}</div>
+        <div class="import-summary-stat-label">Connections</div>
+      </div>`;
+    }
+    
+    if (configData.scripts) {
+      html += `<div class="import-summary-stat">
+        <div class="import-summary-stat-value">${configData.scripts.length}</div>
+        <div class="import-summary-stat-label">Scripts</div>
+      </div>`;
+    }
+    
+    if (configData.replicationConfigs) {
+      html += `<div class="import-summary-stat">
+        <div class="import-summary-stat-value">${configData.replicationConfigs.length}</div>
+        <div class="import-summary-stat-label">Configurations</div>
+      </div>`;
+    }
+    
+    html += '</div></div>';
+
+    // Show connections preview
+    if (configData.connections && configData.connections.length > 0) {
+      html += '<div class="import-preview-section">';
+      html += '<h5>Database Connections</h5>';
+      
+      configData.connections.forEach((conn: any) => {
+        const existing = this.state.connections.find(c => c.name === conn.name || (!generateNewIds && c.id === conn.id));
+        let status = 'new';
+        if (existing) {
+          status = mergeMode === 'skip-duplicates' ? 'skip' : 'update';
+        }
+        
+        html += `<div class="preview-item">
+          <div class="preview-item-info">
+            <div class="preview-item-name">${this.escapeHtml(conn.name)}</div>
+            <div class="preview-item-details">Database: ${this.escapeHtml(conn.database || 'Unknown')}</div>
+          </div>
+          <div class="preview-item-status ${status}">${status.toUpperCase()}</div>
+        </div>`;
+      });
+      
+      html += '</div>';
+    }
+
+    // Show scripts preview
+    if (configData.scripts && configData.scripts.length > 0) {
+      html += '<div class="import-preview-section">';
+      html += '<h5>Scripts</h5>';
+      
+      configData.scripts.forEach((script: any) => {
+        const existing = this.state.sqlScripts.find(s => s.name === script.name || (!generateNewIds && s.id === script.id));
+        let status = 'new';
+        if (existing) {
+          status = mergeMode === 'skip-duplicates' ? 'skip' : 'update';
+        }
+        
+        html += `<div class="preview-item">
+          <div class="preview-item-info">
+            <div class="preview-item-name">${this.escapeHtml(script.name)}</div>
+            <div class="preview-item-details">Language: ${script.language || 'SQL'}</div>
+          </div>
+          <div class="preview-item-status ${status}">${status.toUpperCase()}</div>
+        </div>`;
+      });
+      
+      html += '</div>';
+    }
+
+    // Show replication configs preview
+    if (configData.replicationConfigs && configData.replicationConfigs.length > 0) {
+      html += '<div class="import-preview-section">';
+      html += '<h5>Replication Configurations</h5>';
+      
+      configData.replicationConfigs.forEach((config: any) => {
+        const existing = this.state.configurations.find(c => c.name === config.name || (!generateNewIds && c.id === config.id));
+        let status = 'new';
+        if (existing) {
+          status = mergeMode === 'skip-duplicates' ? 'skip' : 'update';
+        }
+        
+        html += `<div class="preview-item">
+          <div class="preview-item-info">
+            <div class="preview-item-name">${this.escapeHtml(config.name)}</div>
+            <div class="preview-item-details">Source to Target replication</div>
+          </div>
+          <div class="preview-item-status ${status}">${status.toUpperCase()}</div>
+        </div>`;
+      });
+      
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  private async confirmImport() {
+    try {
+      const configData = (this.elements.importPreviewModal as any).pendingImportData;
+      if (!configData) {
+        throw new Error('No configuration data to import');
+      }
+
+      const importOptions = {
+        mergeMode: this.elements.importMode.value,
+        generateNewIds: this.elements.generateNewIds.checked
+      };
+
+      // Perform the import
+      const result = await window.electronAPI.config.import(configData, importOptions);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      const importResult = result.data;
+      
+      // Refresh all data from storage
+      await this.loadAllData();
+      this.updateUI();
+      
+      this.hideImportPreviewModal();
+      this.hideSettingsModal();
+      
+      this.log(`Configuration imported successfully!`);
+      this.log(`Imported: ${importResult.imported.connections} connections, ${importResult.imported.scripts} scripts, ${importResult.imported.configs} configurations`);
+      if (importResult.skipped.connections + importResult.skipped.scripts + importResult.skipped.configs > 0) {
+        this.log(`Skipped: ${importResult.skipped.connections} connections, ${importResult.skipped.scripts} scripts, ${importResult.skipped.configs} configurations`);
+      }
+      if (importResult.errors.length > 0) {
+        importResult.errors.forEach((error: string) => this.log(`Import warning: ${error}`));
+      }
+      
+    } catch (error) {
+      this.showError(`Failed to import configuration: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   // Utility Methods
   private hideAllModals() {
     this.hideConnectionModal();
     this.hideSqlScriptModal();
     this.hideConfigModal();
+    this.hideSettingsModal();
+    this.hideImportPreviewModal();
   }
 
   private getConnectionName(connectionId: string): string {

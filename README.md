@@ -38,6 +38,14 @@ This is a standalone Electron application with direct database connectivity:
    npm run package
    ```
 
+## Key Features
+
+- **Database Replication**: Replicate MS SQL Server and Azure SQL databases using BACPAC technology
+- **Configuration Management**: Save and manage database connections, SQL scripts, and replication configurations
+- **Settings Import/Export**: Export your configurations to share with team members or backup settings. Import configurations from JSON files for quick setup
+- **Secure Storage**: All sensitive data is encrypted and stored locally in `data/storage.json` [[memory:4758196]]
+- **Post-Replication Scripts**: Run custom SQL scripts after replication completes
+
 ## Project Structure
 
 ```
