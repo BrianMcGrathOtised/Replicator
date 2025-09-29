@@ -9,6 +9,9 @@ dist/
 build/
 release/
 
+# Replicator-win32-x64
+Replicator-win32-x64/
+
 # Environment files
 .env
 .env.local
@@ -113,3 +116,5 @@ app/build/
 
 # TypeScript
 *.tsbuildinfo 
+
+Replicator-win32-x64/*
