@@ -135,21 +135,9 @@ class DataReplicatorUI {
     scriptsEmptyState: document.getElementById('scriptsEmptyState') as HTMLDivElement,
     
     // Configuration management
-    configsList: document.getElementById('configsList') as HTMLDivElement,
-    selectedConfigSelect: document.getElementById('selectedConfigSelect') as HTMLSelectElement,
-    configDetails: document.getElementById('configDetails') as HTMLDivElement,
-    configSource: document.getElementById('configSource') as HTMLSpanElement,
-    configTarget: document.getElementById('configTarget') as HTMLSpanElement,
-    configScripts: document.getElementById('configScripts') as HTMLSpanElement,
-    configLastRun: document.getElementById('configLastRun') as HTMLSpanElement,
-    
-    // Replication control
-    startReplicationBtn: document.getElementById('startReplicationBtn') as HTMLButtonElement,
-    cancelReplicationBtn: document.getElementById('cancelReplicationBtn') as HTMLButtonElement,
-    progressContainer: document.getElementById('progressContainer') as HTMLDivElement,
-    progressFill: document.getElementById('progressFill') as HTMLDivElement,
-    progressText: document.getElementById('progressText') as HTMLDivElement,
-    statusMessage: document.getElementById('statusMessage') as HTMLDivElement,
+    configurationsTable: document.getElementById('configurationsTable') as HTMLTableElement,
+    configurationsTableBody: document.getElementById('configurationsTableBody') as HTMLTableSectionElement,
+    configurationsEmptyState: document.getElementById('configurationsEmptyState') as HTMLDivElement,
     
     // Logs
     logs: document.getElementById('logs') as HTMLDivElement,
@@ -316,7 +304,7 @@ class DataReplicatorUI {
     // Navigation
     this.elements.navButtons.forEach(button => {
       button.addEventListener('click', (e) => {
-        const target = e.target as HTMLButtonElement;
+        const target = e.currentTarget as HTMLButtonElement;
         const viewName = target.getAttribute('data-view');
         if (viewName) {
           this.switchView(viewName);
@@ -327,12 +315,7 @@ class DataReplicatorUI {
     // Primary action button (changes based on current view)
     this.elements.primaryActionBtn.addEventListener('click', () => this.handlePrimaryAction());
     
-    // Configuration management
-    this.elements.selectedConfigSelect.addEventListener('change', () => this.onConfigSelectionChange());
-    
-    // Replication control
-    this.elements.startReplicationBtn.addEventListener('click', () => this.startReplication());
-    this.elements.cancelReplicationBtn.addEventListener('click', () => this.cancelReplication());
+    // Configuration management and replication control removed - now handled via table buttons
     
     // Logs
     this.elements.clearLogsBtn.addEventListener('click', () => this.clearLogs());
@@ -362,7 +345,7 @@ class DataReplicatorUI {
     // Settings tab management
     this.elements.settingsTabButtons.forEach(button => {
       button.addEventListener('click', (e) => {
-        const target = e.target as HTMLButtonElement;
+        const target = e.currentTarget as HTMLButtonElement;
         const tabName = target.getAttribute('data-tab');
         if (tabName) {
           this.switchSettingsTab(tabName);
@@ -402,7 +385,7 @@ class DataReplicatorUI {
     const resultsTabButtons = document.querySelectorAll('.results-tab-button');
     resultsTabButtons.forEach(button => {
       button.addEventListener('click', (e) => {
-        const target = e.target as HTMLButtonElement;
+        const target = e.currentTarget as HTMLButtonElement;
         const tabName = target.getAttribute('data-tab');
         if (tabName) {
           this.switchCompareResultsTab(tabName);
@@ -559,7 +542,6 @@ class DataReplicatorUI {
     this.resetConnectionModal();
     // Update UI when modal is closed to reflect any changes
     this.updateConnectionsList();
-    this.updateConfigSelect();
   }
 
   private resetConnectionModal() {
@@ -849,7 +831,6 @@ class DataReplicatorUI {
     this.resetConfigModal();
     // Update UI when modal is closed to reflect any changes
     this.updateConfigurationsList();
-    this.updateConfigSelect();
   }
 
   private resetConfigModal() {
@@ -992,7 +973,6 @@ class DataReplicatorUI {
       }
       
       this.updateConfigurationsList();
-      this.updateConfigSelect();
       this.hideConfigModal();
       
       const action = editingConfigId ? 'updated' : 'saved';
@@ -1003,97 +983,10 @@ class DataReplicatorUI {
   }
 
   // Configuration Selection
-  private onConfigSelectionChange() {
-    const configId = this.elements.selectedConfigSelect.value;
-    this.state.selectedConfigId = configId;
-    
-    if (configId) {
-      const config = this.state.configurations.find(c => c.id === configId);
-      if (config) {
-        this.displayConfigDetails(config);
-        this.elements.startReplicationBtn.disabled = false;
-      }
-    } else {
-      this.elements.configDetails.style.display = 'none';
-      this.elements.startReplicationBtn.disabled = true;
-    }
-  }
-
-  private displayConfigDetails(config: StoredConfiguration) {
-    const sourceConnection = this.state.connections.find(c => c.id === config.sourceConnectionId);
-    const targetConnection = this.state.connections.find(c => c.id === config.targetId);
-    const scripts = this.state.sqlScripts.filter(s => config.scriptIds.includes(s.id));
-
-    this.elements.configSource.textContent = sourceConnection 
-      ? `${sourceConnection.name} (${sourceConnection.databaseName})`
-      : 'Connection not found';
-    this.elements.configTarget.textContent = targetConnection 
-      ? `${targetConnection.name} (${targetConnection.databaseName})`
-      : 'Connection not found';
-    this.elements.configScripts.textContent = scripts.length > 0 
-      ? `${scripts.length} script(s): ${scripts.map(s => s.name).join(', ')}`
-      : 'None';
-    this.elements.configLastRun.textContent = config.lastRun 
-      ? this.formatDate(new Date(config.lastRun))
-      : 'Never';
-    
-    this.elements.configDetails.style.display = 'block';
-  }
+  // Configuration selection methods removed - now handled via table buttons
 
   // Replication Control
-  private async startReplication() {
-    if (!this.state.selectedConfigId) {
-      this.showError('Please select a configuration first');
-      return;
-    }
-
-    const config = this.state.configurations.find(c => c.id === this.state.selectedConfigId);
-    if (!config) {
-      this.showError('Selected configuration not found');
-      return;
-    }
-
-    try {
-      this.state.isReplicating = true;
-      this.updateReplicationButtons();
-      this.showProgress(0, 'Starting replication...');
-      
-      // Use the stored configuration IPC which handles connection string decryption
-      const result = await window.electronAPI.replication.startStored({ configId: this.state.selectedConfigId });
-      
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-      this.state.currentJobId = result.data.jobId;
-      this.log(`Replication started with job ID: ${result.data.jobId}`);
-      
-      // Start polling for status
-      this.pollReplicationStatus();
-      
-    } catch (error) {
-      this.state.isReplicating = false;
-      this.updateReplicationButtons();
-      this.hideProgress();
-      this.showError(`Failed to start replication: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  private async cancelReplication() {
-    if (!this.state.currentJobId) return;
-
-    try {
-      console.log('Sending cancel request for job:', this.state.currentJobId);
-      const result = await window.electronAPI.replication.cancel(this.state.currentJobId);
-
-      if (!result.success) {
-        throw new Error(`Failed to cancel replication: ${result.error}`);
-      }
-
-      this.log('Replication cancelled');
-    } catch (error) {
-      this.showError(`Failed to cancel replication: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+  // startReplication and cancelReplication methods removed - replication now handled via runConfiguration
 
   private async pollReplicationStatus() {
     if (!this.state.currentJobId || !this.state.isReplicating) return;
@@ -1108,30 +1001,28 @@ class DataReplicatorUI {
 
       const status = result.data;
       
-      this.showProgress(status.progress || 0, status.message || 'Processing...');
+      this.log(`Replication progress: ${Math.round(status.progress || 0)}% - ${status.message || 'Processing...'}`);
       
       if (status.status === 'completed') {
         this.state.isReplicating = false;
         this.state.currentJobId = null;
-        this.updateReplicationButtons();
-        this.hideProgress();
         this.log('Replication completed successfully');
         
-        // Update last run time
+        // Update last run time for the configuration that was run
         if (this.state.selectedConfigId) {
           const config = this.state.configurations.find(c => c.id === this.state.selectedConfigId);
           if (config) {
             config.lastRun = new Date().toISOString();
             config.updatedAt = new Date().toISOString();
             await this.saveConfigurationToStorage(config);
-            this.displayConfigDetails(config);
+            this.updateConfigurationsList();
           }
         }
+        this.state.selectedConfigId = null;
       } else if (status.status === 'failed') {
         this.state.isReplicating = false;
         this.state.currentJobId = null;
-        this.updateReplicationButtons();
-        this.hideProgress();
+        this.state.selectedConfigId = null;
         this.showError(`Replication failed: ${status.message || 'Unknown error'}`);
       } else {
         // Continue polling
@@ -1143,29 +1034,12 @@ class DataReplicatorUI {
     }
   }
 
-  // UI Updates
-  private updateReplicationButtons() {
-    this.elements.startReplicationBtn.disabled = this.state.isReplicating || !this.state.selectedConfigId;
-    this.elements.cancelReplicationBtn.disabled = !this.state.isReplicating;
-  }
-
-  private showProgress(progress: number, message: string) {
-    this.elements.progressContainer.style.display = 'block';
-    this.elements.progressFill.style.width = `${progress}%`;
-    this.elements.progressText.textContent = `${Math.round(progress)}%`;
-    this.elements.statusMessage.textContent = message;
-  }
-
-  private hideProgress() {
-    this.elements.progressContainer.style.display = 'none';
-  }
+  // UI update methods removed - progress now shown via logs and notifications
 
   private updateUI() {
     this.updateConnectionsList();
     this.updateScriptsList();
     this.updateConfigurationsList();
-    this.updateConfigSelect();
-    this.updateReplicationButtons();
   }
 
   private updateConnectionsList() {
@@ -1264,45 +1138,32 @@ class DataReplicatorUI {
 
   private updateConfigurationsList() {
     if (this.state.configurations.length === 0) {
-      this.elements.configsList.innerHTML = '<div class="empty-state">No configurations created yet</div>';
+      this.elements.configurationsTable.style.display = 'none';
+      this.elements.configurationsEmptyState.style.display = 'block';
     } else {
-      this.elements.configsList.innerHTML = this.state.configurations.map(config => `
-        <div class="config-item">
-          <div class="config-header">
-            <h4>${this.escapeHtml(config.name)}</h4>
-            <div class="config-actions">
-              <button class="btn btn-small btn-secondary" onclick="dataReplicatorUI.editConfiguration('${config.id}')">Edit</button>
-              <button class="btn btn-small btn-danger" onclick="dataReplicatorUI.deleteConfiguration('${config.id}')">Delete</button>
+      this.elements.configurationsTable.style.display = 'table';
+      this.elements.configurationsEmptyState.style.display = 'none';
+      
+      this.elements.configurationsTableBody.innerHTML = this.state.configurations.map(config => `
+        <tr>
+          <td>${this.escapeHtml(config.name)}</td>
+          <td>${this.getConnectionName(config.sourceConnectionId)}</td>
+          <td>${this.getConnectionName(config.targetId)}</td>
+          <td>${config.scriptIds.length}</td>
+          <td>${config.lastRun ? this.formatDate(new Date(config.lastRun)) : 'Never'}</td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-small btn-primary" onclick="dataReplicatorUI.runConfiguration('${config.id}')" title="Run Configuration">Run</button>
+              <button class="btn btn-small btn-secondary" onclick="dataReplicatorUI.editConfiguration('${config.id}')" title="Edit Configuration">Edit</button>
+              <button class="btn btn-small btn-danger" onclick="dataReplicatorUI.deleteConfiguration('${config.id}')" title="Delete Configuration">Delete</button>
             </div>
-          </div>
-          <div class="config-summary">
-            <div><strong>Source:</strong> ${this.getConnectionName(config.sourceConnectionId)}</div>
-            <div><strong>Target:</strong> ${this.getConnectionName(config.targetId)}</div>
-            <div><strong>Scripts:</strong> ${config.scriptIds.length}</div>
-            <div><strong>Last Run:</strong> ${config.lastRun ? this.formatDate(new Date(config.lastRun)) : 'Never'}</div>
-          </div>
-        </div>
+          </td>
+        </tr>
       `).join('');
     }
   }
 
-  private updateConfigSelect() {
-    const currentValue = this.elements.selectedConfigSelect.value;
-    this.elements.selectedConfigSelect.innerHTML = '<option value="">Choose a configuration...</option>';
-    
-    this.state.configurations.forEach(config => {
-      const option = document.createElement('option');
-      option.value = config.id;
-      option.textContent = config.name;
-      this.elements.selectedConfigSelect.appendChild(option);
-    });
-    
-    // Restore selection if still valid
-    if (currentValue && this.state.configurations.some(c => c.id === currentValue)) {
-      this.elements.selectedConfigSelect.value = currentValue;
-      this.state.selectedConfigId = currentValue;
-    }
-  }
+  // updateConfigSelect method removed - configuration selection now handled via table buttons
 
   // Storage Management
   private async loadAllData() {
@@ -1923,8 +1784,6 @@ class DataReplicatorUI {
       // Clear selection if this config was selected
       if (this.state.selectedConfigId === configId) {
         this.state.selectedConfigId = null;
-        this.elements.selectedConfigSelect.value = '';
-        this.elements.configDetails.style.display = 'none';
       }
       
       this.updateUI();
@@ -1939,6 +1798,49 @@ class DataReplicatorUI {
         this.log('Network error - server may be down or unreachable');
       }
       this.showError(`Failed to delete configuration: ${errorMessage}`);
+    }
+  }
+
+  public async runConfiguration(configId: string) {
+    this.log(`runConfiguration called with ID: ${configId}`);
+    const config = this.state.configurations.find(c => c.id === configId);
+    if (!config) {
+      this.log(`Configuration with ID ${configId} not found in current state`);
+      this.showError('Configuration not found');
+      return;
+    }
+
+    if (this.state.isReplicating) {
+      this.showError('A replication is already in progress. Please wait for it to complete.');
+      return;
+    }
+
+    try {
+      // Set the selected config for tracking
+      this.state.selectedConfigId = configId;
+      
+      // Start the replication
+      this.state.isReplicating = true;
+      this.log(`Starting replication for configuration "${config.name}"...`);
+      
+      // Use the stored configuration IPC which handles connection string decryption
+      const result = await window.electronAPI.replication.startStored({ configId: configId });
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      this.state.currentJobId = result.data.jobId;
+      this.log(`Replication started with job ID: ${result.data.jobId} for configuration "${config.name}"`);
+      
+      // Start polling for status
+      this.pollReplicationStatus();
+      
+    } catch (error) {
+      this.state.isReplicating = false;
+      this.state.selectedConfigId = null;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log(`Run configuration error: ${errorMessage}`);
+      this.showError(`Failed to start replication: ${errorMessage}`);
     }
   }
 
