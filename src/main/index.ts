@@ -5,6 +5,7 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 import log from 'electron-log';
 import { storageService } from './services/StorageService';
 import { replicationService } from './services/ReplicationService';
+import { schemaComparisonService } from './services/SchemaComparisonService';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -362,7 +363,79 @@ class DataReplicatorApp {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
     });
+
+    // General file writing handler
+    ipcMain.handle('write-file', async (_, filePath: string, content: string) => {
+      try {
+        const fs = require('fs').promises;
+        await fs.writeFile(filePath, content, 'utf8');
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Schema comparison handlers
+    ipcMain.handle('schema:compare', async (_, sourceConnectionId: string, targetConnectionId: string) => {
+      try {
+        // Get connection strings with decrypted credentials
+        const sourceConnectionString = await storageService.getConnectionString(sourceConnectionId);
+        const targetConnectionString = await storageService.getConnectionString(targetConnectionId);
+        
+        // Perform schema comparison
+        const result = await schemaComparisonService.compareSchemas(sourceConnectionString, targetConnectionString);
+        
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('schema:extract', async (_, connectionId: string) => {
+      try {
+        // Get connection string with decrypted credentials
+        const connectionString = await storageService.getConnectionString(connectionId);
+        
+        // Extract schema
+        const schema = await schemaComparisonService.extractDatabaseSchema(connectionString);
+        
+        return { success: true, data: schema };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    // Data comparison handlers
+    ipcMain.handle('data:compare', async (_, sourceConnectionId: string, targetConnectionId: string) => {
+      try {
+        // Get connection strings with decrypted credentials
+        const sourceConnectionString = await storageService.getConnectionString(sourceConnectionId);
+        const targetConnectionString = await storageService.getConnectionString(targetConnectionId);
+        
+        // Perform data comparison
+        const result = await schemaComparisonService.compareData(sourceConnectionString, targetConnectionString);
+        
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ipcMain.handle('data:extract-row-counts', async (_, connectionId: string) => {
+      try {
+        // Get connection string with decrypted credentials
+        const connectionString = await storageService.getConnectionString(connectionId);
+        
+        // Extract row counts
+        const rowCounts = await schemaComparisonService.extractTableRowCounts(connectionString);
+        
+        return { success: true, data: rowCounts };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
   }
+
 
   private cleanup(): void {
     log.info('Cleaning up application');

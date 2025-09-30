@@ -8,6 +8,7 @@ declare global {
       selectDirectory: () => Promise<string | null>;
       selectConfigFile: () => Promise<string | null>;
       saveConfigFile: (defaultName?: string) => Promise<string | null>;
+      writeFile: (filePath: string, content: string) => Promise<any>;
       getAppInfo: () => Promise<{
         name: string;
         version: string;
@@ -47,6 +48,14 @@ declare global {
         saveToFile: (filePath: string, configData: any) => Promise<any>;
         loadFromFile: (filePath: string) => Promise<any>;
       };
+      schema: {
+        compare: (sourceConnectionId: string, targetConnectionId: string) => Promise<any>;
+        extract: (connectionId: string) => Promise<any>;
+      };
+      data: {
+        compare: (sourceConnectionId: string, targetConnectionId: string) => Promise<any>;
+        extractRowCounts: (connectionId: string) => Promise<any>;
+      };
     };
   }
 }
@@ -60,7 +69,7 @@ interface AppState {
   selectedConfigId: string | null;
   connections: SavedConnection[];
   sqlScripts: SavedSqlScript[];
-  activeTab: string;
+  activeView: string;
 }
 
 interface StoredConfiguration {
@@ -104,22 +113,25 @@ class DataReplicatorUI {
     selectedConfigId: null,
     connections: [],
     sqlScripts: [],
-    activeTab: 'connections'
+    activeView: 'databases'
   };
 
   private elements = {
-    // Tab management
-    tabButtons: document.querySelectorAll('.tab-button'),
-    tabContents: document.querySelectorAll('.tab-content'),
+    // Navigation
+    navButtons: document.querySelectorAll('.nav-button'),
+    views: document.querySelectorAll('.view'),
+    viewTitle: document.getElementById('viewTitle') as HTMLHeadingElement,
+    primaryActionBtn: document.getElementById('primaryActionBtn') as HTMLButtonElement,
     
-    // Saved items management
-    addConnectionBtn: document.getElementById('addConnectionBtn') as HTMLButtonElement,
-    addScriptBtn: document.getElementById('addScriptBtn') as HTMLButtonElement,
-    connectionsList: document.getElementById('connectionsList') as HTMLDivElement,
-    scriptsList: document.getElementById('scriptsList') as HTMLDivElement,
+    // Storage lists
+    connectionsTable: document.getElementById('connectionsTable') as HTMLTableElement,
+    connectionsTableBody: document.getElementById('connectionsTableBody') as HTMLTableSectionElement,
+    connectionsEmptyState: document.getElementById('connectionsEmptyState') as HTMLDivElement,
+    scriptsTable: document.getElementById('scriptsTable') as HTMLTableElement,
+    scriptsTableBody: document.getElementById('scriptsTableBody') as HTMLTableSectionElement,
+    scriptsEmptyState: document.getElementById('scriptsEmptyState') as HTMLDivElement,
     
     // Configuration management
-    addConfigBtn: document.getElementById('addConfigBtn') as HTMLButtonElement,
     configsList: document.getElementById('configsList') as HTMLDivElement,
     selectedConfigSelect: document.getElementById('selectedConfigSelect') as HTMLSelectElement,
     configDetails: document.getElementById('configDetails') as HTMLDivElement,
@@ -145,11 +157,7 @@ class DataReplicatorUI {
     connectionStatus: document.getElementById('connectionStatus') as HTMLSpanElement,
     loadingOverlay: document.getElementById('loadingOverlay') as HTMLDivElement,
     
-    // Settings
-    settingsBtn: document.getElementById('settingsBtn') as HTMLButtonElement,
-    settingsModal: document.getElementById('settingsModal') as HTMLDivElement,
-    settingsModalCloseBtn: document.getElementById('settingsModalCloseBtn') as HTMLButtonElement,
-    settingsModalCloseBtn2: document.getElementById('settingsModalCloseBtn2') as HTMLButtonElement,
+    // Settings (now integrated in view)
     settingsTabButtons: document.querySelectorAll('.settings-tab-button'),
     settingsTabContents: document.querySelectorAll('.settings-tab-content'),
     exportConnections: document.getElementById('exportConnections') as HTMLInputElement,
@@ -203,6 +211,39 @@ class DataReplicatorUI {
     targetConnection: document.getElementById('targetConnection') as HTMLSelectElement,
     // createTargetDatabase checkbox removed - always create if doesn't exist
     scriptSelection: document.getElementById('scriptSelection') as HTMLDivElement,
+    
+    // Database Compare Elements
+    sourceDbSelect: document.getElementById('sourceDbSelect') as HTMLSelectElement,
+    targetDbSelect: document.getElementById('targetDbSelect') as HTMLSelectElement,
+    compareSchema: document.getElementById('compareSchema') as HTMLInputElement,
+    compareData: document.getElementById('compareData') as HTMLInputElement,
+    compareIndexes: document.getElementById('compareIndexes') as HTMLInputElement,
+    compareConstraints: document.getElementById('compareConstraints') as HTMLInputElement,
+    startCompareBtn: document.getElementById('startCompareBtn') as HTMLButtonElement,
+    exportCompareBtn: document.getElementById('exportCompareBtn') as HTMLButtonElement,
+    compareResultsSection: document.getElementById('compareResultsSection') as HTMLDivElement,
+    totalDifferences: document.getElementById('totalDifferences') as HTMLSpanElement,
+    schemaDifferences: document.getElementById('schemaDifferences') as HTMLSpanElement,
+    dataDifferences: document.getElementById('dataDifferences') as HTMLSpanElement,
+    schemaDiffTable: document.getElementById('schemaDiffTable') as HTMLTableElement,
+    schemaDiffTableBody: document.getElementById('schemaDiffTableBody') as HTMLTableSectionElement,
+    schemaDiffEmptyState: document.getElementById('schemaDiffEmptyState') as HTMLDivElement,
+    dataDiffTable: document.getElementById('dataDiffTable') as HTMLTableElement,
+    dataDiffTableBody: document.getElementById('dataDiffTableBody') as HTMLTableSectionElement,
+    dataDiffEmptyState: document.getElementById('dataDiffEmptyState') as HTMLDivElement,
+    summaryReport: document.getElementById('summaryReport') as HTMLDivElement,
+    
+    // Export Comparison Modal Elements
+    exportComparisonModal: document.getElementById('exportComparisonModal') as HTMLDivElement,
+    exportComparisonModalCloseBtn: document.getElementById('exportComparisonModalCloseBtn') as HTMLButtonElement,
+    exportComparisonCancelBtn: document.getElementById('exportComparisonCancelBtn') as HTMLButtonElement,
+    exportComparisonSaveBtn: document.getElementById('exportComparisonSaveBtn') as HTMLButtonElement,
+    exportFileName: document.getElementById('exportFileName') as HTMLInputElement,
+    exportLocation: document.getElementById('exportLocation') as HTMLInputElement,
+    browseLocationBtn: document.getElementById('browseLocationBtn') as HTMLButtonElement,
+    exportSchemaDiff: document.getElementById('exportSchemaDiff') as HTMLInputElement,
+    exportDataDiff: document.getElementById('exportDataDiff') as HTMLInputElement,
+    exportSummary: document.getElementById('exportSummary') as HTMLInputElement,
   };
 
   constructor() {
@@ -226,7 +267,9 @@ class DataReplicatorUI {
     this.validateElements();
     this.setupEventListeners();
     await this.loadAllData();
+    await this.loadAppInfo();
     this.updateUI();
+    this.switchView(this.state.activeView); // Initialize the default view
     this.log('Data Replicator initialized');
   }
 
@@ -267,23 +310,21 @@ class DataReplicatorUI {
   }
 
   private setupEventListeners() {
-    // Tab management
-    this.elements.tabButtons.forEach(button => {
+    // Navigation
+    this.elements.navButtons.forEach(button => {
       button.addEventListener('click', (e) => {
         const target = e.target as HTMLButtonElement;
-        const tabName = target.getAttribute('data-tab');
-        if (tabName) {
-          this.switchTab(tabName);
+        const viewName = target.getAttribute('data-view');
+        if (viewName) {
+          this.switchView(viewName);
         }
       });
     });
     
-    // Saved items management
-    this.elements.addConnectionBtn.addEventListener('click', () => this.showConnectionModal());
-    this.elements.addScriptBtn.addEventListener('click', () => this.showSqlScriptModal());
+    // Primary action button (changes based on current view)
+    this.elements.primaryActionBtn.addEventListener('click', () => this.handlePrimaryAction());
     
     // Configuration management
-    this.elements.addConfigBtn.addEventListener('click', () => this.showConfigModal());
     this.elements.selectedConfigSelect.addEventListener('change', () => this.onConfigSelectionChange());
     
     // Replication control
@@ -311,10 +352,7 @@ class DataReplicatorUI {
     this.elements.sourceConnection.addEventListener('change', () => this.onSourceConnectionChange());
     this.elements.targetConnection.addEventListener('change', () => this.onTargetConnectionChange());
     
-    // Settings Modal
-    this.elements.settingsBtn.addEventListener('click', () => this.showSettingsModal());
-    this.elements.settingsModalCloseBtn.addEventListener('click', () => this.hideSettingsModal());
-    this.elements.settingsModalCloseBtn2.addEventListener('click', () => this.hideSettingsModal());
+    // Settings (now integrated in view)
     this.elements.exportBtn.addEventListener('click', () => this.exportConfiguration());
     this.elements.importBtn.addEventListener('click', () => this.importConfiguration());
     
@@ -325,6 +363,46 @@ class DataReplicatorUI {
         const tabName = target.getAttribute('data-tab');
         if (tabName) {
           this.switchSettingsTab(tabName);
+        }
+      });
+    });
+    
+    // Database Compare event listeners
+    if (this.elements.sourceDbSelect) {
+      this.elements.sourceDbSelect.addEventListener('change', () => this.onCompareDbSelectionChange());
+    }
+    if (this.elements.targetDbSelect) {
+      this.elements.targetDbSelect.addEventListener('change', () => this.onCompareDbSelectionChange());
+    }
+    if (this.elements.startCompareBtn) {
+      this.elements.startCompareBtn.addEventListener('click', () => this.startDatabaseComparison());
+    }
+    if (this.elements.exportCompareBtn) {
+      this.elements.exportCompareBtn.addEventListener('click', () => this.showExportComparisonModal());
+    }
+    
+    // Export Comparison Modal event listeners
+    if (this.elements.exportComparisonModalCloseBtn) {
+      this.elements.exportComparisonModalCloseBtn.addEventListener('click', () => this.hideExportComparisonModal());
+    }
+    if (this.elements.exportComparisonCancelBtn) {
+      this.elements.exportComparisonCancelBtn.addEventListener('click', () => this.hideExportComparisonModal());
+    }
+    if (this.elements.exportComparisonSaveBtn) {
+      this.elements.exportComparisonSaveBtn.addEventListener('click', () => this.exportComparisonResults());
+    }
+    if (this.elements.browseLocationBtn) {
+      this.elements.browseLocationBtn.addEventListener('click', () => this.browseExportLocation());
+    }
+    
+    // Database Compare results tab management
+    const resultsTabButtons = document.querySelectorAll('.results-tab-button');
+    resultsTabButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const target = e.target as HTMLButtonElement;
+        const tabName = target.getAttribute('data-tab');
+        if (tabName) {
+          this.switchCompareResultsTab(tabName);
         }
       });
     });
@@ -345,36 +423,90 @@ class DataReplicatorUI {
     
 
     
-    // Modal click outside to close
+    // Add visual feedback when clicking outside modal (shake animation)
     [this.elements.connectionModal, this.elements.sqlScriptModal, this.elements.configModal, 
-     this.elements.settingsModal, this.elements.importPreviewModal].forEach(modal => {
+     this.elements.importPreviewModal, this.elements.exportComparisonModal].forEach(modal => {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {
-          this.hideAllModals();
+          // Shake the modal to indicate it won't close
+          const modalContent = modal.querySelector('.modal') as HTMLElement;
+          if (modalContent) {
+            modalContent.classList.add('modal-shake');
+            setTimeout(() => {
+              modalContent.classList.remove('modal-shake');
+            }, 500);
+          }
         }
       });
     });
   }
 
-  // Tab Management
-  private switchTab(tabName: string) {
-    this.state.activeTab = tabName;
+  // View Management
+  private switchView(viewName: string) {
+    this.state.activeView = viewName;
     
-    this.elements.tabButtons.forEach(button => {
-      if (button.getAttribute('data-tab') === tabName) {
+    // Update navigation buttons
+    this.elements.navButtons.forEach(button => {
+      if (button.getAttribute('data-view') === viewName) {
         button.classList.add('active');
       } else {
         button.classList.remove('active');
       }
     });
 
-    this.elements.tabContents.forEach(content => {
-      if (content.id === `${tabName}-tab`) {
-        content.classList.add('active');
+    // Update views
+    this.elements.views.forEach(view => {
+      if (view.id === `${viewName}-view`) {
+        view.classList.add('active');
       } else {
-        content.classList.remove('active');
+        view.classList.remove('active');
       }
     });
+
+    // Update header based on current view
+    this.updateViewHeader(viewName);
+    
+    // Initialize view-specific data when switching to database compare
+    if (viewName === 'database-compare') {
+      this.initializeDatabaseCompareView();
+    }
+  }
+
+  private updateViewHeader(viewName: string) {
+    const viewConfig = {
+      databases: { title: 'Database Connections', action: 'Add Connection' },
+      scripts: { title: 'SQL Scripts', action: 'Add Script' },
+      configurations: { title: 'Replication Configurations', action: 'Create Configuration' },
+      'database-compare': { title: 'Database Compare', action: 'Compare Databases' },
+      settings: { title: 'Settings', action: '' }
+    };
+
+    const config = viewConfig[viewName as keyof typeof viewConfig];
+    if (config) {
+      this.elements.viewTitle.textContent = config.title;
+      this.elements.primaryActionBtn.textContent = config.action;
+      this.elements.primaryActionBtn.style.display = config.action ? 'flex' : 'none';
+    }
+  }
+
+  private handlePrimaryAction() {
+    switch (this.state.activeView) {
+      case 'databases':
+        this.showConnectionModal();
+        break;
+      case 'scripts':
+        this.showSqlScriptModal();
+        break;
+      case 'configurations':
+        this.showConfigModal();
+        break;
+      case 'database-compare':
+        this.startDatabaseComparison();
+        break;
+      case 'settings':
+        // No primary action for settings
+        break;
+    }
   }
 
   // Connection Management
@@ -600,7 +732,7 @@ class DataReplicatorUI {
   }
 
   // SQL Script Management
-  private showSqlScriptModal(script?: SavedSqlScript) {
+  public showSqlScriptModal(script?: SavedSqlScript) {
     this.resetSqlScriptModal();
     
     // Store the script ID being edited for later use in save
@@ -1035,47 +1167,94 @@ class DataReplicatorUI {
 
   private updateConnectionsList() {
     if (this.state.connections.length === 0) {
-      this.elements.connectionsList.innerHTML = '<div class="empty-state">No saved connections</div>';
+      this.elements.connectionsTable.style.display = 'none';
+      this.elements.connectionsEmptyState.style.display = 'block';
     } else {
-      this.elements.connectionsList.innerHTML = this.state.connections.map(conn => `
-        <div class="storage-item">
-          <div class="item-header">
-            <h4>${this.escapeHtml(conn.name)}</h4>
-            <div class="item-actions">
-              <button class="btn btn-small btn-secondary" onclick="dataReplicatorUI.editConnection('${conn.id}')">Edit</button>
-              <button class="btn btn-small btn-danger" onclick="dataReplicatorUI.deleteConnection('${conn.id}')">Delete</button>
+      this.elements.connectionsTable.style.display = 'table';
+      this.elements.connectionsEmptyState.style.display = 'none';
+      
+      this.elements.connectionsTableBody.innerHTML = this.state.connections.map(conn => `
+        <tr>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #0f172a;">${this.escapeHtml(conn.name)}</span>
+              ${conn.description ? `<small style="color: #64748b; margin-top: 0.25rem;">${this.escapeHtml(conn.description)}</small>` : ''}
             </div>
-          </div>
-          <div class="item-details">
-            <div><strong>Database:</strong> ${this.escapeHtml(conn.databaseName)}</div>
-            <div><strong>Type:</strong> ${conn.isAzure ? 'Azure SQL' : 'SQL Server'}${conn.isTargetDatabase ? ' (Target)' : ''}</div>
-            ${conn.description ? `<div><strong>Description:</strong> ${this.escapeHtml(conn.description)}</div>` : ''}
-            <div><strong>Created:</strong> ${this.formatDate(new Date(conn.createdAt))}</div>
-          </div>
-        </div>
+          </td>
+          <td>${this.escapeHtml(conn.databaseName)}</td>
+          <td>
+            <div class="server-type">
+              <span class="server-icon">${conn.isAzure ? '☁️' : '🖥️'}</span>
+              <span>${conn.isAzure ? 'Azure SQL' : 'SQL Server'}</span>
+            </div>
+          </td>
+          <td>
+            ${conn.isTargetDatabase ? 
+              '<span class="status-badge target">Target</span>' : 
+              '<span class="status-badge source">Source</span>'
+            }
+          </td>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span>${this.formatDate(new Date(conn.createdAt))}</span>
+              <small style="color: #64748b; margin-top: 0.25rem;">
+                ${this.getRelativeTime(new Date(conn.createdAt))}
+              </small>
+            </div>
+          </td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-secondary" onclick="dataReplicatorUI.editConnection('${conn.id}')">Edit</button>
+              <button class="btn btn-danger" onclick="dataReplicatorUI.deleteConnection('${conn.id}')">Delete</button>
+            </div>
+          </td>
+        </tr>
       `).join('');
     }
   }
 
   private updateScriptsList() {
     if (this.state.sqlScripts.length === 0) {
-      this.elements.scriptsList.innerHTML = '<div class="empty-state">No saved scripts</div>';
+      this.elements.scriptsTable.style.display = 'none';
+      this.elements.scriptsEmptyState.style.display = 'block';
     } else {
-      this.elements.scriptsList.innerHTML = this.state.sqlScripts.map(script => `
-        <div class="storage-item">
-          <div class="item-header">
-            <h4>${this.escapeHtml(script.name)}</h4>
-            <div class="item-actions">
-              <button class="btn btn-small btn-secondary" onclick="dataReplicatorUI.editScript('${script.id}')">Edit</button>
-              <button class="btn btn-small btn-danger" onclick="dataReplicatorUI.deleteScript('${script.id}')">Delete</button>
+      this.elements.scriptsTable.style.display = 'table';
+      this.elements.scriptsEmptyState.style.display = 'none';
+      
+      this.elements.scriptsTableBody.innerHTML = this.state.sqlScripts.map(script => `
+        <tr>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #0f172a;">${this.escapeHtml(script.name)}</span>
+              ${script.description ? `<small style="color: #64748b; margin-top: 0.25rem;">${this.escapeHtml(script.description)}</small>` : ''}
             </div>
-          </div>
-          <div class="item-details">
-            ${script.description ? `<div><strong>Description:</strong> ${this.escapeHtml(script.description)}</div>` : ''}
-            <div><strong>Length:</strong> ${script.content.length} characters</div>
-            <div><strong>Created:</strong> ${this.formatDate(new Date(script.createdAt))}</div>
-          </div>
-        </div>
+          </td>
+          <td>
+            ${script.description ? this.escapeHtml(script.description) : '<span style="color: #9ca3af; font-style: italic;">No description</span>'}
+          </td>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span>${script.content.length.toLocaleString()} characters</span>
+              <small style="color: #64748b; margin-top: 0.25rem;">
+                ${Math.ceil(script.content.length / 100)} lines (approx.)
+              </small>
+            </div>
+          </td>
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span>${this.formatDate(new Date(script.createdAt))}</span>
+              <small style="color: #64748b; margin-top: 0.25rem;">
+                ${this.getRelativeTime(new Date(script.createdAt))}
+              </small>
+            </div>
+          </td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-secondary" onclick="dataReplicatorUI.editScript('${script.id}')">Edit</button>
+              <button class="btn btn-danger" onclick="dataReplicatorUI.deleteScript('${script.id}')">Delete</button>
+            </div>
+          </td>
+        </tr>
       `).join('');
     }
   }
@@ -1760,20 +1939,14 @@ class DataReplicatorUI {
     }
   }
 
-  // Settings Modal Methods
-  private async showSettingsModal() {
-    this.elements.settingsModal.style.display = 'flex';
-    // Load app version
+  // Settings Methods (now integrated in view)
+  private async loadAppInfo() {
     try {
       const appInfo = await window.electronAPI.getAppInfo();
       this.elements.appVersion.textContent = `${appInfo.name} v${appInfo.version}`;
     } catch (error) {
       this.elements.appVersion.textContent = 'Unknown';
     }
-  }
-
-  private hideSettingsModal() {
-    this.elements.settingsModal.style.display = 'none';
   }
 
   private switchSettingsTab(tabName: string) {
@@ -2003,7 +2176,6 @@ class DataReplicatorUI {
       this.updateUI();
       
       this.hideImportPreviewModal();
-      this.hideSettingsModal();
       
       this.log(`Configuration imported successfully!`);
       this.log(`Imported: ${importResult.imported.connections} connections, ${importResult.imported.scripts} scripts, ${importResult.imported.configs} configurations`);
@@ -2020,13 +2192,6 @@ class DataReplicatorUI {
   }
 
   // Utility Methods
-  private hideAllModals() {
-    this.hideConnectionModal();
-    this.hideSqlScriptModal();
-    this.hideConfigModal();
-    this.hideSettingsModal();
-    this.hideImportPreviewModal();
-  }
 
   private getConnectionName(connectionId: string): string {
     const connection = this.state.connections.find(c => c.id === connectionId);
@@ -2044,7 +2209,25 @@ class DataReplicatorUI {
   }
 
   private formatDate(date: Date): string {
-    return date.toLocaleString();
+    return date.toLocaleDateString();
+  }
+
+  private getRelativeTime(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else if (diffMinutes > 0) {
+      return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+    } else {
+      return 'Just now';
+    }
   }
 
   private log(message: string) {
@@ -2064,6 +2247,457 @@ class DataReplicatorUI {
 
   private clearLogs() {
     this.elements.logs.innerHTML = '';
+  }
+
+  // Database Compare Methods
+  private initializeDatabaseCompareView() {
+    this.updateCompareDbDropdowns();
+    this.onCompareDbSelectionChange();
+  }
+
+  private updateCompareDbDropdowns() {
+    // Update source database dropdown
+    if (this.elements.sourceDbSelect) {
+      this.elements.sourceDbSelect.innerHTML = '<option value="">Select source database...</option>';
+      this.state.connections.forEach(conn => {
+        const option = document.createElement('option');
+        option.value = conn.id;
+        option.textContent = `${conn.name} (${conn.databaseName})`;
+        this.elements.sourceDbSelect.appendChild(option);
+      });
+    }
+
+    // Update target database dropdown
+    if (this.elements.targetDbSelect) {
+      this.elements.targetDbSelect.innerHTML = '<option value="">Select target database...</option>';
+      this.state.connections.forEach(conn => {
+        const option = document.createElement('option');
+        option.value = conn.id;
+        option.textContent = `${conn.name} (${conn.databaseName})`;
+        this.elements.targetDbSelect.appendChild(option);
+      });
+    }
+  }
+
+  private onCompareDbSelectionChange() {
+    const sourceSelected = this.elements.sourceDbSelect?.value || '';
+    const targetSelected = this.elements.targetDbSelect?.value || '';
+    
+    // Enable start comparison button only if both databases are selected and they're different
+    if (this.elements.startCompareBtn) {
+      this.elements.startCompareBtn.disabled = !sourceSelected || !targetSelected || sourceSelected === targetSelected;
+    }
+  }
+
+  private async startDatabaseComparison() {
+    const sourceId = this.elements.sourceDbSelect?.value;
+    const targetId = this.elements.targetDbSelect?.value;
+    
+    if (!sourceId || !targetId) {
+      this.showError('Please select both source and target databases');
+      return;
+    }
+    
+    if (sourceId === targetId) {
+      this.showError('Source and target databases must be different');
+      return;
+    }
+    
+    const sourceConn = this.state.connections.find(c => c.id === sourceId);
+    const targetConn = this.state.connections.find(c => c.id === targetId);
+    
+    if (!sourceConn || !targetConn) {
+      this.showError('Selected databases not found');
+      return;
+    }
+    
+    try {
+      this.elements.startCompareBtn.disabled = true;
+      this.elements.startCompareBtn.textContent = 'Comparing...';
+      
+      this.log(`Starting database comparison: ${sourceConn.name} vs ${targetConn.name}`);
+      
+      // Simulate comparison process (in a real implementation, this would call the backend)
+      await this.performDatabaseComparison(sourceConn, targetConn);
+      
+    } catch (error) {
+      this.showError(`Comparison failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.elements.startCompareBtn.disabled = false;
+      this.elements.startCompareBtn.textContent = 'Start Comparison';
+    }
+  }
+
+  private async performDatabaseComparison(sourceConn: SavedConnection, targetConn: SavedConnection) {
+    const compareOptions = {
+      schema: this.elements.compareSchema?.checked || false,
+      data: this.elements.compareData?.checked || false,
+      indexes: this.elements.compareIndexes?.checked || false,
+      constraints: this.elements.compareConstraints?.checked || false
+    };
+    
+    this.log(`Comparing ${sourceConn.name} (${sourceConn.databaseName}) with ${targetConn.name} (${targetConn.databaseName})`);
+    this.log(`Comparison options: Schema=${compareOptions.schema}, Data=${compareOptions.data}, Indexes=${compareOptions.indexes}, Constraints=${compareOptions.constraints}`);
+    
+    try {
+      // Perform real schema comparison if schema option is selected
+      let schemaResults = null;
+      if (compareOptions.schema) {
+        this.log('Performing schema comparison...');
+        const schemaComparisonResult = await window.electronAPI.schema.compare(sourceConn.id, targetConn.id);
+        
+        if (!schemaComparisonResult.success) {
+          throw new Error(`Schema comparison failed: ${schemaComparisonResult.error}`);
+        }
+        
+        schemaResults = schemaComparisonResult.data;
+        this.log(`Schema comparison completed: ${schemaResults.totalDifferences} differences found`);
+      }
+      
+      // Perform real data comparison if data option is selected
+      let dataResults: any[] = [];
+      if (compareOptions.data) {
+        this.log('Performing data comparison (row counts)...');
+        const dataComparisonResult = await window.electronAPI.data.compare(sourceConn.id, targetConn.id);
+        
+        if (!dataComparisonResult.success) {
+          throw new Error(`Data comparison failed: ${dataComparisonResult.error}`);
+        }
+        
+        dataResults = dataComparisonResult.data.differences;
+        this.log(`Data comparison completed: ${dataResults.length} differences found`);
+        this.log(`Total rows - Source: ${dataComparisonResult.data.totalRowCountSource.toLocaleString()}, Target: ${dataComparisonResult.data.totalRowCountTarget.toLocaleString()}`);
+      }
+      
+      // Combine results
+      const combinedResults = {
+        totalDifferences: schemaResults ? schemaResults.totalDifferences : 0,
+        schemaDifferences: schemaResults ? schemaResults.schemaDifferences : 0,
+        dataDifferences: dataResults.length,
+        schemaDetails: schemaResults ? schemaResults.differences.map((diff: any) => ({
+          type: diff.type,
+          objectName: diff.objectName,
+          difference: diff.difference,
+          sourceValue: diff.sourceValue,
+          targetValue: diff.targetValue
+        })) : [],
+        dataDetails: dataResults
+      };
+      
+      this.displayComparisonResults(combinedResults);
+      this.log(`Comparison completed: ${combinedResults.totalDifferences} total differences found`);
+      
+    } catch (error) {
+      this.log(`Comparison failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  private displayComparisonResults(results: any) {
+    // Store results for export
+    (this as any).lastComparisonResults = results;
+    
+    // Update summary statistics
+    if (this.elements.totalDifferences) {
+      this.elements.totalDifferences.textContent = results.totalDifferences.toString();
+    }
+    if (this.elements.schemaDifferences) {
+      this.elements.schemaDifferences.textContent = results.schemaDifferences.toString();
+    }
+    if (this.elements.dataDifferences) {
+      this.elements.dataDifferences.textContent = results.dataDifferences.toString();
+    }
+    
+    // Display schema differences in table format
+    if (results.schemaDetails.length === 0) {
+      this.elements.schemaDiffTable.style.display = 'none';
+      this.elements.schemaDiffEmptyState.style.display = 'block';
+    } else {
+      this.elements.schemaDiffTable.style.display = 'table';
+      this.elements.schemaDiffEmptyState.style.display = 'none';
+      
+      this.elements.schemaDiffTableBody.innerHTML = results.schemaDetails.map((diff: any) => `
+        <tr>
+          <td>
+            <span class="diff-type-badge ${diff.type.toLowerCase().replace(/\s+/g, '-')}">${this.escapeHtml(diff.type)}</span>
+          </td>
+          <td>
+            <code class="object-name">${this.escapeHtml(diff.objectName)}</code>
+          </td>
+          <td>${this.escapeHtml(diff.difference)}</td>
+          <td>
+            <code class="value-display">${this.escapeHtml(diff.sourceValue)}</code>
+          </td>
+          <td>
+            <code class="value-display">${this.escapeHtml(diff.targetValue)}</code>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    // Display data differences in table format
+    if (results.dataDetails.length === 0) {
+      this.elements.dataDiffTable.style.display = 'none';
+      this.elements.dataDiffEmptyState.style.display = 'block';
+    } else {
+      this.elements.dataDiffTable.style.display = 'table';
+      this.elements.dataDiffEmptyState.style.display = 'none';
+      
+      this.elements.dataDiffTableBody.innerHTML = results.dataDetails.map((diff: any) => `
+        <tr>
+          <td>
+            <span class="table-name">${this.escapeHtml(diff.schemaName)}.${this.escapeHtml(diff.tableName)}</span>
+          </td>
+          <td>
+            <span class="diff-type-badge data ${diff.severity.toLowerCase()}">${this.escapeHtml(diff.differenceType)}</span>
+          </td>
+          <td>
+            <span class="count-badge source">${diff.sourceRowCount.toLocaleString()}</span>
+          </td>
+          <td>
+            <span class="count-badge target">${diff.targetRowCount.toLocaleString()}</span>
+          </td>
+          <td>
+            <span class="count-badge difference">${diff.difference.toLocaleString()}</span>
+          </td>
+          <td>${this.escapeHtml(diff.description)}</td>
+        </tr>
+      `).join('');
+    }
+    
+    // Generate summary report
+    if (this.elements.summaryReport) {
+      const timestamp = new Date().toLocaleString();
+      this.elements.summaryReport.innerHTML = `
+        <div class="summary-content">
+          <h4>Database Comparison Report</h4>
+          <div class="summary-meta">
+            <p><strong>Generated:</strong> ${timestamp}</p>
+            <p><strong>Total Differences Found:</strong> ${results.totalDifferences}</p>
+          </div>
+          <div class="summary-breakdown">
+            <h5>Breakdown by Category:</h5>
+            <ul>
+              <li><strong>Schema Differences:</strong> ${results.schemaDifferences}</li>
+              <li><strong>Data Differences:</strong> ${results.dataDifferences}</li>
+            </ul>
+          </div>
+          <div class="summary-details">
+            <h5>Schema Issues:</h5>
+            <ul>
+              ${results.schemaDetails.map((diff: any) => `<li>${diff.type}: ${diff.objectName}</li>`).join('')}
+            </ul>
+            <h5>Data Issues:</h5>
+            <ul>
+              ${results.dataDetails.map((diff: any) => `<li>${diff.table}: ${diff.differenceType} (${diff.count} affected)</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+    }
+    
+    // Show results section and enable export
+    if (this.elements.compareResultsSection) {
+      this.elements.compareResultsSection.style.display = 'block';
+    }
+    if (this.elements.exportCompareBtn) {
+      this.elements.exportCompareBtn.disabled = false;
+    }
+  }
+
+  private switchCompareResultsTab(tabName: string) {
+    // Update tab buttons
+    const tabButtons = document.querySelectorAll('.results-tab-button');
+    tabButtons.forEach(button => {
+      if (button.getAttribute('data-tab') === tabName) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
+
+    // Update tab contents
+    const tabContents = document.querySelectorAll('.results-tab-content');
+    tabContents.forEach(content => {
+      if (content.id === `${tabName}-tab`) {
+        content.classList.add('active');
+      } else {
+        content.classList.remove('active');
+      }
+    });
+  }
+
+  private showExportComparisonModal() {
+    // Set default filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    this.elements.exportFileName.value = `database-comparison-${timestamp}`;
+    
+    // Clear location
+    this.elements.exportLocation.value = '';
+    
+    // Show modal
+    this.elements.exportComparisonModal.style.display = 'flex';
+  }
+
+  private hideExportComparisonModal() {
+    this.elements.exportComparisonModal.style.display = 'none';
+  }
+
+  private async browseExportLocation() {
+    try {
+      const selectedPath = await window.electronAPI.selectDirectory();
+      if (selectedPath) {
+        this.elements.exportLocation.value = selectedPath;
+      }
+    } catch (error) {
+      this.showError(`Failed to select directory: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async exportComparisonResults() {
+    try {
+      const fileName = this.elements.exportFileName.value.trim();
+      const location = this.elements.exportLocation.value.trim();
+      
+      if (!fileName) {
+        this.showError('Please enter a file name');
+        return;
+      }
+      
+      if (!location) {
+        this.showError('Please select a save location');
+        return;
+      }
+      
+      const exportOptions = {
+        includeSchemaDiff: this.elements.exportSchemaDiff.checked,
+        includeDataDiff: this.elements.exportDataDiff.checked,
+        includeSummary: this.elements.exportSummary.checked
+      };
+      
+      if (!exportOptions.includeSchemaDiff && !exportOptions.includeDataDiff && !exportOptions.includeSummary) {
+        this.showError('Please select at least one export option');
+        return;
+      }
+      
+      this.elements.exportComparisonSaveBtn.disabled = true;
+      this.elements.exportComparisonSaveBtn.textContent = 'Exporting...';
+      
+      // Generate HTML report
+      const htmlReport = this.generateComparisonReport(exportOptions);
+      
+      // Build the full file path with proper path separator
+      const fullPath = `${location}${location.endsWith('\\') || location.endsWith('/') ? '' : '/'}${fileName}.html`;
+      
+      this.log(`Exporting comparison results to: ${fullPath}`);
+      
+      // Write the file using Electron's file system
+      this.log(`Generated HTML report (${htmlReport.length} characters)`);
+      const writeResult = await window.electronAPI.writeFile(fullPath, htmlReport);
+      
+      if (!writeResult.success) {
+        throw new Error(writeResult.error || 'Failed to write file');
+      }
+      
+      this.hideExportComparisonModal();
+      this.log(`Comparison results exported successfully as ${fileName}.html`);
+      
+    } catch (error) {
+      this.showError(`Failed to export results: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.elements.exportComparisonSaveBtn.disabled = false;
+      this.elements.exportComparisonSaveBtn.textContent = 'Export Report';
+    }
+  }
+
+  private generateComparisonReport(options: any): string {
+    const results = (this as any).lastComparisonResults;
+    if (!results) {
+      throw new Error('No comparison results available');
+    }
+    
+    const timestamp = new Date().toLocaleString();
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Database Comparison Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+          .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f2f2f2; }
+          .diff-type { background: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; }
+          code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Database Comparison Report</h1>
+          <p>Generated: ${timestamp}</p>
+        </div>
+        
+        <div class="summary">
+          <h2>Summary</h2>
+          <p><strong>Total Differences:</strong> ${results.totalDifferences}</p>
+          <p><strong>Schema Differences:</strong> ${results.schemaDifferences}</p>
+          <p><strong>Data Differences:</strong> ${results.dataDifferences}</p>
+        </div>
+    `;
+    
+    if (options.includeSchemaDiff && results.schemaDetails.length > 0) {
+      html += `
+        <h2>Schema Differences</h2>
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Object Name</th><th>Difference</th><th>Source Value</th><th>Target Value</th></tr>
+          </thead>
+          <tbody>
+            ${results.schemaDetails.map((diff: any) => `
+              <tr>
+                <td><span class="diff-type">${this.escapeHtml(diff.type)}</span></td>
+                <td><code>${this.escapeHtml(diff.objectName)}</code></td>
+                <td>${this.escapeHtml(diff.difference)}</td>
+                <td><code>${this.escapeHtml(diff.sourceValue)}</code></td>
+                <td><code>${this.escapeHtml(diff.targetValue)}</code></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    
+    if (options.includeDataDiff && results.dataDetails.length > 0) {
+      html += `
+        <h2>Data Differences (Row Count Analysis)</h2>
+        <table>
+          <thead>
+            <tr><th>Table</th><th>Difference Type</th><th>Source Rows</th><th>Target Rows</th><th>Difference</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            ${results.dataDetails.map((diff: any) => `
+              <tr>
+                <td><strong>${this.escapeHtml(diff.schemaName)}.${this.escapeHtml(diff.tableName)}</strong></td>
+                <td><span class="diff-type">${this.escapeHtml(diff.differenceType)}</span></td>
+                <td>${diff.sourceRowCount.toLocaleString()}</td>
+                <td>${diff.targetRowCount.toLocaleString()}</td>
+                <td>${diff.difference.toLocaleString()}</td>
+                <td>${this.escapeHtml(diff.description)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    
+    html += `
+      </body>
+      </html>
+    `;
+    
+    return html;
   }
 
 

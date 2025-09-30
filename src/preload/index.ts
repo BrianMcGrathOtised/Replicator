@@ -7,6 +7,7 @@ interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   selectConfigFile: () => Promise<string | null>;
   saveConfigFile: (defaultName?: string) => Promise<string | null>;
+  writeFile: (filePath: string, content: string) => Promise<any>;
   
   // App information
   getAppInfo: () => Promise<{
@@ -58,6 +59,18 @@ interface ElectronAPI {
     saveToFile: (filePath: string, configData: any) => Promise<any>;
     loadFromFile: (filePath: string) => Promise<any>;
   };
+
+  // Schema comparison
+  schema: {
+    compare: (sourceConnectionId: string, targetConnectionId: string) => Promise<any>;
+    extract: (connectionId: string) => Promise<any>;
+  };
+
+  // Data comparison
+  data: {
+    compare: (sourceConnectionId: string, targetConnectionId: string) => Promise<any>;
+    extractRowCounts: (connectionId: string) => Promise<any>;
+  };
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -67,6 +80,7 @@ const electronAPI: ElectronAPI = {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   selectConfigFile: () => ipcRenderer.invoke('select-config-file'),
   saveConfigFile: (defaultName?: string) => ipcRenderer.invoke('save-config-file', defaultName),
+  writeFile: (filePath: string, content: string) => ipcRenderer.invoke('write-file', filePath, content),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   
   connections: {
@@ -105,6 +119,16 @@ const electronAPI: ElectronAPI = {
     import: (configData: any, options?: any) => ipcRenderer.invoke('config:import', configData, options),
     saveToFile: (filePath: string, configData: any) => ipcRenderer.invoke('config:save-to-file', filePath, configData),
     loadFromFile: (filePath: string) => ipcRenderer.invoke('config:load-from-file', filePath),
+  },
+
+  schema: {
+    compare: (sourceConnectionId: string, targetConnectionId: string) => ipcRenderer.invoke('schema:compare', sourceConnectionId, targetConnectionId),
+    extract: (connectionId: string) => ipcRenderer.invoke('schema:extract', connectionId),
+  },
+
+  data: {
+    compare: (sourceConnectionId: string, targetConnectionId: string) => ipcRenderer.invoke('data:compare', sourceConnectionId, targetConnectionId),
+    extractRowCounts: (connectionId: string) => ipcRenderer.invoke('data:extract-row-counts', connectionId),
   }
 };
 
