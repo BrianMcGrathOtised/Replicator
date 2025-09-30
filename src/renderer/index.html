@@ -8,134 +8,427 @@
 </head>
 <body>
     <div id="app">
-        <header class="header">
-            <div class="header-content">
-                <div class="header-text">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="app-logo">
                     <h1>Data Replicator</h1>
-                    <p>Replicate databases using saved configurations</p>
-                </div>
-                <div class="header-actions">
-                    <button id="settingsBtn" class="btn btn-secondary settings-btn">
-                        <span class="settings-icon">⚙️</span>
-                        Settings
-                    </button>
                 </div>
             </div>
-        </header>
+            
+            <nav class="sidebar-nav">
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <button class="nav-button active" data-view="databases">
+                            <span class="nav-icon">🗄️</span>
+                            <span class="nav-text">Databases</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-button" data-view="scripts">
+                            <span class="nav-icon">📝</span>
+                            <span class="nav-text">Scripts</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-button" data-view="configurations">
+                            <span class="nav-icon">⚙️</span>
+                            <span class="nav-text">Configurations</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-button" data-view="database-compare">
+                            <span class="nav-icon">🔍</span>
+                            <span class="nav-text">Database Compare</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-button" data-view="settings">
+                            <span class="nav-icon">🔧</span>
+                            <span class="nav-text">Settings</span>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
 
-        <main class="main-content">
-            <div class="content-layout">
-                <div class="left-panel">
-                    <!-- Saved Items Management Section -->
-                    <section class="section">
-                        <h2>Saved Items</h2>
-                        <div class="tab-container">
-                            <div class="tab-buttons">
-                                <button class="tab-button active" data-tab="connections">Database Connections</button>
-                                <button class="tab-button" data-tab="scripts">SQL Scripts</button>
-                            </div>
-
-                            <!-- Database Connections Tab -->
-                            <div class="tab-content active" id="connections-tab">
-                                <div class="storage-header">
-                                    <button id="addConnectionBtn" class="btn btn-primary">Add Connection</button>
-                                </div>
-                                <div class="storage-list" id="connectionsList">
-                                    <div class="empty-state">No saved connections</div>
-                                </div>
-                            </div>
-
-                            <!-- SQL Scripts Tab -->
-                            <div class="tab-content" id="scripts-tab">
-                                <div class="storage-header">
-                                    <button id="addScriptBtn" class="btn btn-primary">Add Script</button>
-                                </div>
-                                <div class="storage-list" id="scriptsList">
-                                    <div class="empty-state">No saved scripts</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Configuration Management Section -->
-                    <section class="section">
-                        <h2>Replication Configurations</h2>
-                        <div class="storage-header">
-                            <button id="addConfigBtn" class="btn btn-primary">Create New Configuration</button>
-                        </div>
-                        <div class="storage-list" id="configsList">
-                            <div class="empty-state">No configurations created yet</div>
-                        </div>
-                    </section>
-
-                    <!-- Run Configuration Section -->
-                    <section class="section">
-                        <h2>Run Replication</h2>
-                        <div class="form-group">
-                            <label for="selectedConfigSelect">Select Configuration to Run:</label>
-                            <select id="selectedConfigSelect">
-                                <option value="">Choose a configuration...</option>
-                            </select>
-                        </div>
-                        
-                        <div id="configDetails" class="config-details mb-2" style="display: none;">
-                            <h4>Configuration Details:</h4>
-                            <div class="config-info">
-                                <div class="info-item">
-                                    <label>Source Database:</label>
-                                    <span id="configSource">-</span>
-                                </div>
-                                <div class="info-item">
-                                    <label>Target Database:</label>
-                                    <span id="configTarget">-</span>
-                                </div>
-                                <div class="info-item">
-                                    <label>Post-Replication Scripts:</label>
-                                    <span id="configScripts">None</span>
-                                </div>
-                                <div class="info-item">
-                                    <label>Last Run:</label>
-                                    <span id="configLastRun">Never</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-actions mt-2">
-                            <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
-                            <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
-                        </div>
-                        
-                        <!-- Progress Section -->
-                        <div class="progress-container" id="progressContainer" style="display: none;">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="progressFill"></div>
-                            </div>
-                            <div class="progress-text" id="progressText">0%</div>
-                            <div class="status-message" id="statusMessage">Ready</div>
-                        </div>
-                    </section>
+        <!-- Main Content Area -->
+        <main class="main-container">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-content">
+                    <h2 id="viewTitle">Database Connections</h2>
+                    <div class="header-actions">
+                        <button id="primaryActionBtn" class="btn btn-primary">Add Connection</button>
+                    </div>
                 </div>
-                
-                <div class="right-panel">
-                    <!-- Logs Section -->
-                    <section class="logs-section">
-                        <h2>Replication Logs</h2>
-                        <div class="logs-container">
-                            <div id="logs" class="logs"></div>
-                            <div class="logs-actions">
-                                <button id="clearLogsBtn" class="btn btn-secondary">Clear Logs</button>
+            </header>
+
+            <!-- Content Views -->
+            <div class="content-area">
+                <!-- Databases View -->
+                <div id="databases-view" class="view active">
+                    <div class="view-content">
+                        <div class="table-container">
+                            <table class="data-table" id="connectionsTable" style="display: none;">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Database</th>
+                                        <th>Server Type</th>
+                                        <th>Target DB</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="connectionsTableBody">
+                                </tbody>
+                            </table>
+                            <div class="empty-state" id="connectionsEmptyState">
+                                <div class="empty-icon">🗄️</div>
+                                <h3>No Database Connections</h3>
+                                <p>Create your first database connection to get started with replication.</p>
+                                <button class="btn btn-primary" onclick="dataReplicatorUI.showConnectionModal()">Add Connection</button>
                             </div>
                         </div>
-                    </section>
+                    </div>
+                </div>
+
+                <!-- Scripts View -->
+                <div id="scripts-view" class="view">
+                    <div class="view-content">
+                        <div class="table-container">
+                            <table class="data-table" id="scriptsTable" style="display: none;">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>Length</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scriptsTableBody">
+                                </tbody>
+                            </table>
+                            <div class="empty-state" id="scriptsEmptyState">
+                                <div class="empty-icon">📝</div>
+                                <h3>No SQL Scripts</h3>
+                                <p>Create your first SQL script to run after replication.</p>
+                                <button class="btn btn-primary" onclick="dataReplicatorUI.showSqlScriptModal()">Add Script</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configurations View -->
+                <div id="configurations-view" class="view">
+                    <div class="view-content">
+                        <div class="config-management">
+                            <!-- Configuration List -->
+                            <div class="config-list-section">
+                                <h3>Saved Configurations</h3>
+                                <div class="storage-list" id="configsList">
+                                    <div class="empty-state">No configurations created yet</div>
+                                </div>
+                            </div>
+
+                            <!-- Run Configuration Section -->
+                            <div class="run-config-section">
+                                <h3>Run Replication</h3>
+                                <div class="form-group">
+                                    <label for="selectedConfigSelect">Select Configuration to Run:</label>
+                                    <select id="selectedConfigSelect">
+                                        <option value="">Choose a configuration...</option>
+                                    </select>
+                                </div>
+                                
+                                <div id="configDetails" class="config-details mb-2" style="display: none;">
+                                    <h4>Configuration Details:</h4>
+                                    <div class="config-info">
+                                        <div class="info-item">
+                                            <label>Source Database:</label>
+                                            <span id="configSource">-</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <label>Target Database:</label>
+                                            <span id="configTarget">-</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <label>Post-Replication Scripts:</label>
+                                            <span id="configScripts">None</span>
+                                        </div>
+                                        <div class="info-item">
+                                            <label>Last Run:</label>
+                                            <span id="configLastRun">Never</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-actions mt-2">
+                                    <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
+                                    <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
+                                </div>
+                                
+                                <!-- Progress Section -->
+                                <div class="progress-container" id="progressContainer" style="display: none;">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="progressFill"></div>
+                                    </div>
+                                    <div class="progress-text" id="progressText">0%</div>
+                                    <div class="status-message" id="statusMessage">Ready</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Compare View -->
+                <div id="database-compare-view" class="view">
+                    <div class="view-content">
+                        <!-- Compare Configuration Section -->
+                        <div class="compare-config-section">
+                            <div class="config-header">
+                                <h3>Database Comparison Setup</h3>
+                                <div class="config-actions">
+                                    <button id="startCompareBtn" class="btn btn-primary" disabled>Start Comparison</button>
+                                    <button id="exportCompareBtn" class="btn btn-secondary" disabled>Export Results</button>
+                                </div>
+                            </div>
+                            
+                            <div class="compare-form-grid">
+                                <div class="form-group">
+                                    <label for="sourceDbSelect">Source Database:</label>
+                                    <select id="sourceDbSelect">
+                                        <option value="">Select source database...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="targetDbSelect">Target Database:</label>
+                                    <select id="targetDbSelect">
+                                        <option value="">Select target database...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="compare-options">
+                                <h4>Comparison Options</h4>
+                                <div class="options-inline">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="compareSchema" checked>
+                                        <span class="checkmark"></span>
+                                        Schema
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="compareData" checked>
+                                        <span class="checkmark"></span>
+                                        Data
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="compareIndexes">
+                                        <span class="checkmark"></span>
+                                        Indexes
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="compareConstraints">
+                                        <span class="checkmark"></span>
+                                        Constraints
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Comparison Results Section -->
+                        <div class="compare-results-section" id="compareResultsSection" style="display: none;">
+                            <div class="results-header">
+                                <h3>Comparison Results</h3>
+                                <div class="results-summary-inline">
+                                    <span class="summary-item">
+                                        <strong id="totalDifferences">0</strong> Total Differences
+                                    </span>
+                                    <span class="summary-item">
+                                        <strong id="schemaDifferences">0</strong> Schema
+                                    </span>
+                                    <span class="summary-item">
+                                        <strong id="dataDifferences">0</strong> Data
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div class="results-tabs">
+                                <div class="results-tab-buttons">
+                                    <button class="results-tab-button active" data-tab="schema-diff">Schema Differences</button>
+                                    <button class="results-tab-button" data-tab="data-diff">Data Differences</button>
+                                    <button class="results-tab-button" data-tab="summary">Summary Report</button>
+                                </div>
+                                
+                                <!-- Schema Differences Tab -->
+                                <div class="results-tab-content active" id="schema-diff-tab">
+                                    <div class="table-container">
+                                        <table class="data-table" id="schemaDiffTable" style="display: none;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Type</th>
+                                                    <th>Object Name</th>
+                                                    <th>Difference</th>
+                                                    <th>Source Value</th>
+                                                    <th>Target Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="schemaDiffTableBody">
+                                            </tbody>
+                                        </table>
+                                        <div class="empty-state" id="schemaDiffEmptyState">
+                                            <div class="empty-icon">🔍</div>
+                                            <h3>No Schema Differences</h3>
+                                            <p>The database schemas are identical.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Data Differences Tab -->
+                                <div class="results-tab-content" id="data-diff-tab">
+                                    <div class="table-container">
+                                        <table class="data-table" id="dataDiffTable" style="display: none;">
+                                            <thead>
+                                                <tr>
+                                                    <th>Table</th>
+                                                    <th>Difference Type</th>
+                                                    <th>Source Rows</th>
+                                                    <th>Target Rows</th>
+                                                    <th>Difference</th>
+                                                    <th>Description</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="dataDiffTableBody">
+                                            </tbody>
+                                        </table>
+                                        <div class="empty-state" id="dataDiffEmptyState">
+                                            <div class="empty-icon">📊</div>
+                                            <h3>No Data Differences</h3>
+                                            <p>The database data is identical.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Summary Report Tab -->
+                                <div class="results-tab-content" id="summary-tab">
+                                    <div class="summary-container">
+                                        <div id="summaryReport" class="summary-report">
+                                            <div class="empty-state">
+                                                <div class="empty-icon">📋</div>
+                                                <h3>No Comparison Results</h3>
+                                                <p>Run a comparison to see the summary report.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings View -->
+                <div id="settings-view" class="view">
+                    <div class="view-content">
+                        <div class="settings-content">
+                            <div class="settings-tabs">
+                                <div class="settings-tab-buttons">
+                                    <button class="settings-tab-button active" data-tab="import-export">Import/Export</button>
+                                    <button class="settings-tab-button" data-tab="general">General</button>
+                                </div>
+
+                                <!-- Import/Export Tab -->
+                                <div class="settings-tab-content active" id="import-export-tab">
+                                    <h4>Configuration Import/Export</h4>
+                                    <p>Export your configurations to share with others or import existing configurations.</p>
+                                    
+                                    <!-- Export Section -->
+                                    <div class="settings-section">
+                                        <h5>Export Configuration</h5>
+                                        <div class="export-options">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="exportConnections" checked>
+                                                <span class="checkmark"></span>
+                                                Include Database Connections
+                                            </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="exportScripts" checked>
+                                                <span class="checkmark"></span>
+                                                Include SQL Scripts
+                                            </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="exportConfigs" checked>
+                                                <span class="checkmark"></span>
+                                                Include Replication Configurations
+                                            </label>
+                                        </div>
+                                        <div class="export-actions">
+                                            <button id="exportBtn" class="btn btn-primary">Export to File</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Import Section -->
+                                    <div class="settings-section">
+                                        <h5>Import Configuration</h5>
+                                        <div class="import-options">
+                                            <div class="form-group">
+                                                <label for="importMode">Import Mode:</label>
+                                                <select id="importMode">
+                                                    <option value="merge">Merge (Update existing, add new)</option>
+                                                    <option value="replace">Replace (Overwrite existing)</option>
+                                                    <option value="skip-duplicates">Skip Duplicates (Only add new)</option>
+                                                </select>
+                                            </div>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="generateNewIds" checked>
+                                                <span class="checkmark"></span>
+                                                Generate New IDs (Recommended)
+                                            </label>
+                                        </div>
+                                        <div class="import-actions">
+                                            <button id="importBtn" class="btn btn-primary">Import from File</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- General Tab -->
+                                <div class="settings-tab-content" id="general-tab">
+                                    <h4>General Settings</h4>
+                                    <p>Additional settings will be available here in future updates.</p>
+                                    
+                                    <div class="settings-section">
+                                        <h5>Application Information</h5>
+                                        <div class="app-info">
+                                            <div class="info-item">
+                                                <label>Version:</label>
+                                                <span id="appVersion">Loading...</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <label>Storage Location:</label>
+                                                <span>data/storage.json</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Panel (always visible at bottom) -->
+            <div class="logs-panel">
+                <div class="logs-header">
+                    <h3>Activity Logs</h3>
+                    <button id="clearLogsBtn" class="btn btn-secondary btn-small">Clear</button>
+                </div>
+                <div class="logs-container">
+                    <div id="logs" class="logs"></div>
                 </div>
             </div>
         </main>
 
-        <!-- Status Bar -->
-        <footer class="status-bar">
-            <span id="appInfo">Data Replicator v1.0</span>
-            <span id="connectionStatus" class="status-disconnected">Ready</span>
-        </footer>
     </div>
 
     <!-- Loading Overlay -->
@@ -309,100 +602,6 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal-overlay" style="display: none;">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>Settings</h3>
-                <button id="settingsModalCloseBtn" class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="settings-tabs">
-                    <div class="settings-tab-buttons">
-                        <button class="settings-tab-button active" data-tab="import-export">Import/Export</button>
-                        <button class="settings-tab-button" data-tab="general">General</button>
-                    </div>
-
-                    <!-- Import/Export Tab -->
-                    <div class="settings-tab-content active" id="import-export-tab">
-                        <h4>Configuration Import/Export</h4>
-                        <p>Export your configurations to share with others or import existing configurations.</p>
-                        
-                        <!-- Export Section -->
-                        <div class="settings-section">
-                            <h5>Export Configuration</h5>
-                            <div class="export-options">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="exportConnections" checked>
-                                    <span class="checkmark"></span>
-                                    Include Database Connections
-                                </label>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="exportScripts" checked>
-                                    <span class="checkmark"></span>
-                                    Include SQL Scripts
-                                </label>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="exportConfigs" checked>
-                                    <span class="checkmark"></span>
-                                    Include Replication Configurations
-                                </label>
-                            </div>
-                            <div class="export-actions">
-                                <button id="exportBtn" class="btn btn-primary">Export to File</button>
-                            </div>
-                        </div>
-
-                        <!-- Import Section -->
-                        <div class="settings-section">
-                            <h5>Import Configuration</h5>
-                            <div class="import-options">
-                                <div class="form-group">
-                                    <label for="importMode">Import Mode:</label>
-                                    <select id="importMode">
-                                        <option value="merge">Merge (Update existing, add new)</option>
-                                        <option value="replace">Replace (Overwrite existing)</option>
-                                        <option value="skip-duplicates">Skip Duplicates (Only add new)</option>
-                                    </select>
-                                </div>
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="generateNewIds" checked>
-                                    <span class="checkmark"></span>
-                                    Generate New IDs (Recommended)
-                                </label>
-                            </div>
-                            <div class="import-actions">
-                                <button id="importBtn" class="btn btn-primary">Import from File</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- General Tab -->
-                    <div class="settings-tab-content" id="general-tab">
-                        <h4>General Settings</h4>
-                        <p>Additional settings will be available here in future updates.</p>
-                        
-                        <div class="settings-section">
-                            <h5>Application Information</h5>
-                            <div class="app-info">
-                                <div class="info-item">
-                                    <label>Version:</label>
-                                    <span id="appVersion">Loading...</span>
-                                </div>
-                                <div class="info-item">
-                                    <label>Storage Location:</label>
-                                    <span>data/storage.json</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="settingsModalCloseBtn2" class="btn btn-secondary">Close</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Import Preview Modal -->
     <div id="importPreviewModal" class="modal-overlay" style="display: none;">
@@ -419,6 +618,58 @@
             <div class="modal-footer">
                 <button id="importPreviewCancelBtn" class="btn btn-secondary">Cancel</button>
                 <button id="importPreviewConfirmBtn" class="btn btn-primary">Confirm Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Comparison Results Modal -->
+    <div id="exportComparisonModal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Export Comparison Results</h3>
+                <button id="exportComparisonModalCloseBtn" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="exportComparisonForm">
+                    <div class="form-group">
+                        <label for="exportFileName">File Name:</label>
+                        <input type="text" id="exportFileName" placeholder="database-comparison-report" required>
+                        <small>File will be saved as .html format</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="exportLocation">Save Location:</label>
+                        <div class="file-input-group">
+                            <input type="text" id="exportLocation" placeholder="Choose save location..." readonly>
+                            <button type="button" id="browseLocationBtn" class="btn btn-secondary">Browse</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Export Options:</label>
+                        <div class="export-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="exportSchemaDiff" checked>
+                                <span class="checkmark"></span>
+                                Include Schema Differences
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="exportDataDiff" checked>
+                                <span class="checkmark"></span>
+                                Include Data Differences
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="exportSummary" checked>
+                                <span class="checkmark"></span>
+                                Include Summary Report
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button id="exportComparisonCancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="exportComparisonSaveBtn" class="btn btn-primary">Export Report</button>
             </div>
         </div>
     </div>
