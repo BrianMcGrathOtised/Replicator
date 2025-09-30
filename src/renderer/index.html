@@ -128,57 +128,26 @@
                             <!-- Configuration List -->
                             <div class="config-list-section">
                                 <h3>Saved Configurations</h3>
-                                <div class="storage-list" id="configsList">
-                                    <div class="empty-state">No configurations created yet</div>
+                                <div class="table-container">
+                                    <table class="data-table" id="configurationsTable" style="display: none;">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Source</th>
+                                                <th>Target</th>
+                                                <th>Scripts</th>
+                                                <th>Last Run</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="configurationsTableBody">
+                                        </tbody>
+                                    </table>
+                                    <div class="empty-state" id="configurationsEmptyState">No configurations created yet</div>
                                 </div>
                             </div>
 
-                            <!-- Run Configuration Section -->
-                            <div class="run-config-section">
-                                <h3>Run Replication</h3>
-                                <div class="form-group">
-                                    <label for="selectedConfigSelect">Select Configuration to Run:</label>
-                                    <select id="selectedConfigSelect">
-                                        <option value="">Choose a configuration...</option>
-                                    </select>
-                                </div>
-                                
-                                <div id="configDetails" class="config-details mb-2" style="display: none;">
-                                    <h4>Configuration Details:</h4>
-                                    <div class="config-info">
-                                        <div class="info-item">
-                                            <label>Source Database:</label>
-                                            <span id="configSource">-</span>
-                                        </div>
-                                        <div class="info-item">
-                                            <label>Target Database:</label>
-                                            <span id="configTarget">-</span>
-                                        </div>
-                                        <div class="info-item">
-                                            <label>Post-Replication Scripts:</label>
-                                            <span id="configScripts">None</span>
-                                        </div>
-                                        <div class="info-item">
-                                            <label>Last Run:</label>
-                                            <span id="configLastRun">Never</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="form-actions mt-2">
-                                    <button id="startReplicationBtn" class="btn btn-primary" disabled>Start Replication</button>
-                                    <button id="cancelReplicationBtn" class="btn btn-danger" disabled>Cancel</button>
-                                </div>
-                                
-                                <!-- Progress Section -->
-                                <div class="progress-container" id="progressContainer" style="display: none;">
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" id="progressFill"></div>
-                                    </div>
-                                    <div class="progress-text" id="progressText">0%</div>
-                                    <div class="status-message" id="statusMessage">Ready</div>
-                                </div>
-                            </div>
+                           
                         </div>
                     </div>
                 </div>

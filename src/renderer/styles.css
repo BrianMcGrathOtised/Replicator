@@ -184,6 +184,9 @@ body {
 /* ===== DATA TABLES ===== */
 .table-container {
   margin-top: 1.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .data-table {
@@ -353,8 +356,8 @@ body {
 
 /* ===== CONFIGURATION MANAGEMENT ===== */
 .config-management {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 2rem;
   height: 100%;
 }
@@ -366,6 +369,9 @@ body {
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .config-list-section h3,
@@ -990,7 +996,6 @@ body {
   }
   
   .config-management {
-    grid-template-columns: 1fr;
     gap: 1.5rem;
   }
   
