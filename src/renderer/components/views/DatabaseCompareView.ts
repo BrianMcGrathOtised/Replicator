@@ -198,7 +198,7 @@ export class DatabaseCompareView extends BaseComponent {
       }
       
       // Perform real data comparison if data option is selected
-      let dataResults: any[] = [];
+      let dataResults: any = null;
       if (compareOptions.data) {
         console.log('Performing data comparison...');
         const dataComparisonResult = await window.electronAPI.data.compare(sourceConn.id, targetConn.id);
@@ -207,8 +207,8 @@ export class DatabaseCompareView extends BaseComponent {
           throw new Error(`Data comparison failed: ${dataComparisonResult.error}`);
         }
         
-        dataResults = dataComparisonResult.data || [];
-        console.log(`Data comparison completed: ${dataResults.length} table differences found`);
+        dataResults = dataComparisonResult.data;
+        console.log(`Data comparison completed: ${dataResults?.differences?.length || 0} table differences found`);
       }
       
       // Store results and update UI
@@ -217,10 +217,10 @@ export class DatabaseCompareView extends BaseComponent {
         targetDatabase: `${targetConn.name} (${targetConn.databaseName})`,
         comparedAt: new Date().toISOString(),
         schemaDetails: schemaResults?.differences || [],
-        dataDetails: dataResults,
+        dataDetails: dataResults?.differences || [],
         schemaDifferences: schemaResults?.totalDifferences || 0,
-        dataDifferences: dataResults.length,
-        totalDifferences: (schemaResults?.totalDifferences || 0) + dataResults.length
+        dataDifferences: dataResults?.differences?.length || 0,
+        totalDifferences: (schemaResults?.totalDifferences || 0) + (dataResults?.differences?.length || 0)
       };
       
       this.displayComparisonResults();
@@ -235,10 +235,10 @@ export class DatabaseCompareView extends BaseComponent {
     
     const results = this.lastComparisonResults;
     
-    // Update summary
-    this.totalDifferences.textContent = results.totalDifferences.toString();
-    this.schemaDifferences.textContent = results.schemaDifferences.toString();
-    this.dataDifferences.textContent = results.dataDifferences.toString();
+    // Update summary with safe toString() calls
+    this.totalDifferences.textContent = (results.totalDifferences || 0).toString();
+    this.schemaDifferences.textContent = (results.schemaDifferences || 0).toString();
+    this.dataDifferences.textContent = (results.dataDifferences || 0).toString();
     
     // Show results section
     this.compareResultsSection.style.display = 'block';
@@ -275,7 +275,7 @@ export class DatabaseCompareView extends BaseComponent {
   }
 
   private updateDataDifferencesTab(dataDetails: DataDifference[]): void {
-    if (dataDetails.length === 0) {
+    if (!dataDetails || dataDetails.length === 0) {
       this.dataDiffTable.style.display = 'none';
       this.dataDiffEmptyState.style.display = 'block';
     } else {
@@ -284,10 +284,10 @@ export class DatabaseCompareView extends BaseComponent {
       
       this.dataDiffTableBody.innerHTML = dataDetails.map(diff => `
         <tr>
-          <td><span class="table-name">${this.escapeHtml(diff.table)}</span></td>
+          <td><span class="table-name">${this.escapeHtml(`${diff.schemaName}.${diff.tableName}`)}</span></td>
           <td><span class="diff-type-badge data">${this.escapeHtml(diff.differenceType)}</span></td>
-          <td><span class="count-badge source">${diff.sourceRows.toLocaleString()}</span></td>
-          <td><span class="count-badge target">${diff.targetRows.toLocaleString()}</span></td>
+          <td><span class="count-badge source">${diff.sourceRowCount.toLocaleString()}</span></td>
+          <td><span class="count-badge target">${diff.targetRowCount.toLocaleString()}</span></td>
           <td><span class="count-badge difference">${diff.difference.toLocaleString()}</span></td>
           <td>${this.escapeHtml(diff.description)}</td>
         </tr>
@@ -331,7 +331,7 @@ export class DatabaseCompareView extends BaseComponent {
             <h5>Data Issues Found:</h5>
             <ul>
               ${results.dataDetails.slice(0, 5).map((diff: any) => `
-                <li>${this.escapeHtml(diff.table)}: ${this.escapeHtml(diff.description)}</li>
+                <li>${this.escapeHtml(`${diff.schemaName}.${diff.tableName}`)}: ${this.escapeHtml(diff.description)}</li>
               `).join('')}
               ${results.dataDetails.length > 5 ? `<li>... and ${results.dataDetails.length - 5} more</li>` : ''}
             </ul>
@@ -384,8 +384,128 @@ export class DatabaseCompareView extends BaseComponent {
       return;
     }
     
-    // Trigger export modal or direct export
-    eventBus.emit('export:comparison', this.lastComparisonResults);
+    try {
+      this.exportCompareBtn.disabled = true;
+      this.exportCompareBtn.textContent = 'Exporting...';
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultName = `database-comparison-${timestamp}.html`;
+      
+      // Show save dialog
+      const filePath = await window.electronAPI.saveConfigFile(defaultName);
+      if (filePath) {
+        // Generate HTML report
+        const htmlReport = this.generateComparisonReport();
+        
+        // Save comparison results as HTML file
+        await window.electronAPI.writeFile(filePath, htmlReport);
+        console.log(`Comparison results exported to: ${filePath}`);
+        alert(`Comparison results exported successfully to:\n${filePath}`);
+      }
+      
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      this.exportCompareBtn.disabled = false;
+      this.exportCompareBtn.textContent = 'Export Results';
+    }
+  }
+
+  private generateComparisonReport(): string {
+    const results = this.lastComparisonResults;
+    if (!results) {
+      throw new Error('No comparison results available');
+    }
+    
+    const timestamp = new Date().toLocaleString();
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Database Comparison Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+          .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f2f2f2; }
+          .diff-type { background: #ffebee; color: #c62828; padding: 2px 6px; border-radius: 3px; }
+          code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Database Comparison Report</h1>
+          <p>Generated: ${timestamp}</p>
+          <p><strong>Source Database:</strong> ${this.escapeHtml(results.sourceDatabase)}</p>
+          <p><strong>Target Database:</strong> ${this.escapeHtml(results.targetDatabase)}</p>
+          <p><strong>Compared At:</strong> ${this.formatDate(results.comparedAt)}</p>
+        </div>
+        
+        <div class="summary">
+          <h2>Summary</h2>
+          <p><strong>Total Differences:</strong> ${results.totalDifferences}</p>
+          <p><strong>Schema Differences:</strong> ${results.schemaDifferences}</p>
+          <p><strong>Data Differences:</strong> ${results.dataDifferences}</p>
+        </div>
+    `;
+    
+    // Always include schema differences if they exist
+    if (results.schemaDetails && results.schemaDetails.length > 0) {
+      html += `
+        <h2>Schema Differences</h2>
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Object Name</th><th>Difference</th><th>Source Value</th><th>Target Value</th></tr>
+          </thead>
+          <tbody>
+            ${results.schemaDetails.map((diff: any) => `
+              <tr>
+                <td><span class="diff-type">${this.escapeHtml(diff.type)}</span></td>
+                <td><code>${this.escapeHtml(diff.objectName)}</code></td>
+                <td>${this.escapeHtml(diff.difference)}</td>
+                <td><code>${this.escapeHtml(diff.sourceValue)}</code></td>
+                <td><code>${this.escapeHtml(diff.targetValue)}</code></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    
+    // Always include data differences if they exist
+    if (results.dataDetails && results.dataDetails.length > 0) {
+      html += `
+        <h2>Data Differences (Row Count Analysis)</h2>
+        <table>
+          <thead>
+            <tr><th>Table</th><th>Difference Type</th><th>Source Rows</th><th>Target Rows</th><th>Difference</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            ${results.dataDetails.map((diff: any) => `
+              <tr>
+                <td><strong>${this.escapeHtml(`${diff.schemaName}.${diff.tableName}`)}</strong></td>
+                <td><span class="diff-type">${this.escapeHtml(diff.differenceType)}</span></td>
+                <td>${diff.sourceRowCount.toLocaleString()}</td>
+                <td>${diff.targetRowCount.toLocaleString()}</td>
+                <td>${diff.difference.toLocaleString()}</td>
+                <td>${this.escapeHtml(diff.description)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    
+    html += `
+      </body>
+      </html>
+    `;
+    
+    return html;
   }
 
   /**

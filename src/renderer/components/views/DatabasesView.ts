@@ -38,7 +38,57 @@ export class DatabasesView extends BaseComponent {
     if (!this.isInitialized) {
       return;
     }
+    
+    // Only restore content if the container was completely replaced by loading/error state
+    // Check if the container's only child is a loading-state or error-state div
+    const children = this.container.children;
+    const hasOnlyLoadingOrError = children.length === 1 && 
+      (children[0].classList.contains('loading-state') || children[0].classList.contains('error-state'));
+    
+    if (hasOnlyLoadingOrError) {
+      this.restoreOriginalContent();
+    }
+    
     this.updateConnectionsList();
+  }
+
+  private restoreOriginalContent(): void {
+    // Check if we need to restore the original content structure
+    const table = this.container.querySelector('#connectionsTable');
+    if (!table) {
+      // The container was replaced by loading/error state, restore original structure to match index.html
+      this.container.innerHTML = `
+        <div class="view-content">
+          <div class="table-container">
+            <table class="data-table" id="connectionsTable" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Database</th>
+                  <th>Server Type</th>
+                  <th>Target DB</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="connectionsTableBody">
+              </tbody>
+            </table>
+            <div class="empty-state" id="connectionsEmptyState">
+              <div class="empty-icon">🗄️</div>
+              <h3>No Database Connections</h3>
+              <p>Create your first database connection to get started with replication.</p>
+              <button class="btn btn-primary" onclick="dataReplicatorUI.showConnectionModal()">Add Connection</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Re-initialize the DOM element references
+      this.connectionsTable = this.container.querySelector('#connectionsTable') as HTMLTableElement;
+      this.connectionsTableBody = this.container.querySelector('#connectionsTableBody') as HTMLTableSectionElement;
+      this.connectionsEmptyState = this.container.querySelector('#connectionsEmptyState') as HTMLElement;
+    }
   }
 
   private updateConnectionsList(): void {

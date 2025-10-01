@@ -8,6 +8,12 @@ export class ConfigurationsView extends BaseComponent {
   private configurationsTable!: HTMLTableElement;
   private configurationsTableBody!: HTMLTableSectionElement;
   private configurationsEmptyState!: HTMLElement;
+  private progressContainer!: HTMLElement;
+  private progressTitle!: HTMLElement;
+  private progressFill!: HTMLElement;
+  private progressPercent!: HTMLElement;
+  private progressMessage!: HTMLElement;
+  private cancelBtn!: HTMLButtonElement;
 
   constructor() {
     super('configurations-view');
@@ -17,9 +23,22 @@ export class ConfigurationsView extends BaseComponent {
     this.configurationsTable = this.container.querySelector('#configurationsTable') as HTMLTableElement;
     this.configurationsTableBody = this.container.querySelector('#configurationsTableBody') as HTMLTableSectionElement;
     this.configurationsEmptyState = this.container.querySelector('#configurationsEmptyState') as HTMLElement;
+    this.progressContainer = this.container.querySelector('#configProgressContainer') as HTMLElement;
+    this.progressTitle = this.container.querySelector('#configProgressTitle') as HTMLElement;
+    this.progressFill = this.container.querySelector('#configProgressFill') as HTMLElement;
+    this.progressPercent = this.container.querySelector('#configProgressPercent') as HTMLElement;
+    this.progressMessage = this.container.querySelector('#configProgressMessage') as HTMLElement;
+    this.cancelBtn = this.container.querySelector('#cancelConfigBtn') as HTMLButtonElement;
 
     if (!this.configurationsTable || !this.configurationsTableBody || !this.configurationsEmptyState) {
       throw new Error('Required DOM elements not found in configurations view');
+    }
+
+    // Progress bar elements are optional (they might not exist in older HTML)
+    if (this.progressContainer && this.cancelBtn) {
+      this.cancelBtn.addEventListener('click', () => {
+        eventBus.emit('replication:cancel', {});
+      });
     }
 
     // Listen for data updates
@@ -43,14 +62,21 @@ export class ConfigurationsView extends BaseComponent {
       this.render();
     });
 
-    eventBus.on('scripts:loaded', () => {
-      // Scripts loaded - configurations view doesn't need to store them
-      this.render();
+    // Listen for replication progress updates
+    eventBus.on('replication:progress', (event) => {
+      this.updateProgress(event.data);
     });
 
-    eventBus.on('scripts:updated', () => {
-      // Scripts updated - configurations view doesn't need to store them
-      this.render();
+    eventBus.on('replication:started', (event) => {
+      this.showProgress(event.data.configName);
+    });
+
+    eventBus.on('replication:completed', () => {
+      this.hideProgress();
+    });
+
+    eventBus.on('replication:failed', () => {
+      this.hideProgress();
     });
   }
 
@@ -59,7 +85,87 @@ export class ConfigurationsView extends BaseComponent {
     if (!this.isInitialized) {
       return;
     }
+    
+    // Only restore content if the container was completely replaced by loading/error state
+    // Check if the container's only child is a loading-state or error-state div
+    const children = this.container.children;
+    const hasOnlyLoadingOrError = children.length === 1 && 
+      (children[0].classList.contains('loading-state') || children[0].classList.contains('error-state'));
+    
+    if (hasOnlyLoadingOrError) {
+      this.restoreOriginalContent();
+    }
+    
     this.updateConfigurationsList();
+  }
+
+  private restoreOriginalContent(): void {
+    // Check if we need to restore the original content structure
+    const table = this.container.querySelector('#configurationsTable');
+    if (!table) {
+      // The container was replaced by loading/error state, restore original structure to match index.html
+      this.container.innerHTML = `
+        <div class="view-content">
+          <!-- Progress Bar Container -->
+          <div id="configProgressContainer" class="progress-container" style="display: none;">
+            <div class="progress-header">
+              <h4 id="configProgressTitle">Running Configuration...</h4>
+              <button id="cancelConfigBtn" class="btn btn-danger btn-small">Cancel</button>
+            </div>
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar">
+                <div id="configProgressFill" class="progress-fill"></div>
+              </div>
+              <div class="progress-text">
+                <span id="configProgressPercent">0%</span>
+                <span id="configProgressMessage">Initializing...</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table" id="configurationsTable" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Source</th>
+                  <th>Target</th>
+                  <th>Scripts</th>
+                  <th>Last Run</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="configurationsTableBody">
+              </tbody>
+            </table>
+            <div class="empty-state" id="configurationsEmptyState">
+              <div class="empty-icon">⚙️</div>
+              <h3>No Replication Configurations</h3>
+              <p>Create your first replication configuration to start syncing databases.</p>
+              <button class="btn btn-primary" onclick="dataReplicatorUI.showCreateConfigurationModal()">Create Configuration</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Re-initialize the DOM element references
+      this.configurationsTable = this.container.querySelector('#configurationsTable') as HTMLTableElement;
+      this.configurationsTableBody = this.container.querySelector('#configurationsTableBody') as HTMLTableSectionElement;
+      this.configurationsEmptyState = this.container.querySelector('#configurationsEmptyState') as HTMLElement;
+      this.progressContainer = this.container.querySelector('#configProgressContainer') as HTMLElement;
+      this.progressTitle = this.container.querySelector('#configProgressTitle') as HTMLElement;
+      this.progressFill = this.container.querySelector('#configProgressFill') as HTMLElement;
+      this.progressPercent = this.container.querySelector('#configProgressPercent') as HTMLElement;
+      this.progressMessage = this.container.querySelector('#configProgressMessage') as HTMLElement;
+      this.cancelBtn = this.container.querySelector('#cancelConfigBtn') as HTMLButtonElement;
+      
+      // Re-setup cancel button event listener
+      if (this.cancelBtn) {
+        this.cancelBtn.addEventListener('click', () => {
+          eventBus.emit('replication:cancel', {});
+        });
+      }
+    }
   }
 
   private updateConfigurationsList(): void {
@@ -72,16 +178,26 @@ export class ConfigurationsView extends BaseComponent {
       
       this.configurationsTableBody.innerHTML = this.configurations.map(config => `
         <tr>
-          <td>${this.escapeHtml(config.name)}</td>
-          <td>${this.getConnectionName(config.sourceConnectionId)}</td>
-          <td>${this.getConnectionName(config.targetId)}</td>
-          <td>${config.scriptIds.length}</td>
-          <td>${config.lastRun ? this.formatDate(config.lastRun) : 'Never'}</td>
+          <td>
+            <span style="font-weight: 600; color: #0f172a;">${this.escapeHtml(config.name)}</span>
+          </td>
+          <td>
+            <span>${this.getConnectionName(config.sourceConnectionId)}</span>
+          </td>
+          <td>
+            <span>${this.getConnectionName(config.targetId)}</span>
+          </td>
+          <td>
+            <span>${config.scriptIds.length} script${config.scriptIds.length !== 1 ? 's' : ''}</span>
+          </td>
+          <td>
+            ${config.lastRun ? `<span>${this.formatDate(config.lastRun)}</span>` : '<span style="color: #9ca3af; font-style: italic;">Never</span>'}
+          </td>
           <td>
             <div class="table-actions">
-              <button class="btn btn-small btn-primary" onclick="window.dataReplicatorUI.runConfiguration('${config.id}')" title="Run Configuration">Run</button>
-              <button class="btn btn-small btn-secondary" onclick="window.dataReplicatorUI.editConfiguration('${config.id}')" title="Edit Configuration">Edit</button>
-              <button class="btn btn-small btn-danger" onclick="window.dataReplicatorUI.deleteConfiguration('${config.id}')" title="Delete Configuration">Delete</button>
+              <button class="btn btn-primary" onclick="window.dataReplicatorUI.runConfiguration('${config.id}')" title="Run Configuration">Run</button>
+              <button class="btn btn-secondary" onclick="window.dataReplicatorUI.editConfiguration('${config.id}')" title="Edit Configuration">Edit</button>
+              <button class="btn btn-danger" onclick="window.dataReplicatorUI.deleteConfiguration('${config.id}')" title="Delete Configuration">Delete</button>
             </div>
           </td>
         </tr>
@@ -123,7 +239,7 @@ export class ConfigurationsView extends BaseComponent {
           sourceConnectionId: config.sourceConnectionId,
           targetId: config.targetId,
           createTargetDatabase: config.createTargetDatabase || false,
-          scriptIds: config.scriptIds || [],
+          scriptIds: config.configScriptIds || [], // Backend uses 'configScriptIds', frontend uses 'scriptIds'
           createdAt: config.createdAt,
           updatedAt: config.updatedAt,
           lastRun: config.lastRun
@@ -136,7 +252,6 @@ export class ConfigurationsView extends BaseComponent {
         if (this.isInitialized) {
           this.render();
         }
-        console.log(`Loaded ${this.configurations.length} configurations from storage.json`);
       } else {
         throw new Error('Invalid configurations data structure');
       }
@@ -182,5 +297,42 @@ export class ConfigurationsView extends BaseComponent {
   updateSqlScripts(_scripts: SavedSqlScript[]): void {
     // Scripts are not stored in this view
     this.render();
+  }
+
+  /**
+   * Show progress bar for replication
+   */
+  showProgress(configName: string): void {
+    if (this.progressContainer && this.progressTitle) {
+      this.progressTitle.textContent = `Running "${configName}"...`;
+      this.progressContainer.style.display = 'block';
+      this.updateProgress({ progress: 0, message: 'Initializing...' });
+    }
+  }
+
+  /**
+   * Update progress bar
+   */
+  updateProgress(data: { progress?: number; message?: string }): void {
+    if (!this.progressContainer) return;
+
+    if (data.progress !== undefined && this.progressFill && this.progressPercent) {
+      const progress = Math.max(0, Math.min(100, data.progress));
+      this.progressFill.style.width = `${progress}%`;
+      this.progressPercent.textContent = `${Math.round(progress)}%`;
+    }
+
+    if (data.message && this.progressMessage) {
+      this.progressMessage.textContent = data.message;
+    }
+  }
+
+  /**
+   * Hide progress bar
+   */
+  hideProgress(): void {
+    if (this.progressContainer) {
+      this.progressContainer.style.display = 'none';
+    }
   }
 }

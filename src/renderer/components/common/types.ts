@@ -58,12 +58,15 @@ export interface SchemaDifference {
 }
 
 export interface DataDifference {
-  table: string;
-  differenceType: string;
-  sourceRows: number;
-  targetRows: number;
+  tableName: string;
+  schemaName: string;
+  differenceType: 'Row Count Mismatch' | 'Table Missing in Source' | 'Table Missing in Target' | 'Empty Table' | 'Large Difference';
+  sourceRowCount: number;
+  targetRowCount: number;
   difference: number;
+  percentageDifference: number;
   description: string;
+  severity: 'High' | 'Medium' | 'Low';
 }
 
 export interface ComparisonSummary {

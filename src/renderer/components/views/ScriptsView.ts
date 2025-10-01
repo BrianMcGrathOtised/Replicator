@@ -38,7 +38,55 @@ export class ScriptsView extends BaseComponent {
     if (!this.isInitialized) {
       return;
     }
+    
+    // Only restore content if the container was completely replaced by loading/error state
+    // Check if the container's only child is a loading-state or error-state div
+    const children = this.container.children;
+    const hasOnlyLoadingOrError = children.length === 1 && 
+      (children[0].classList.contains('loading-state') || children[0].classList.contains('error-state'));
+    
+    if (hasOnlyLoadingOrError) {
+      this.restoreOriginalContent();
+    }
+    
     this.updateScriptsList();
+  }
+
+  private restoreOriginalContent(): void {
+    // Check if we need to restore the original content structure
+    const table = this.container.querySelector('#scriptsTable');
+    if (!table) {
+      // The container was replaced by loading/error state, restore original structure to match index.html
+      this.container.innerHTML = `
+        <div class="view-content">
+          <div class="table-container">
+            <table class="data-table" id="scriptsTable" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th>Length</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="scriptsTableBody">
+              </tbody>
+            </table>
+            <div class="empty-state" id="scriptsEmptyState">
+              <div class="empty-icon">📝</div>
+              <h3>No SQL Scripts</h3>
+              <p>Create your first SQL script to run after replication.</p>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Re-initialize the DOM element references
+      this.scriptsTable = this.container.querySelector('#scriptsTable') as HTMLTableElement;
+      this.scriptsTableBody = this.container.querySelector('#scriptsTableBody') as HTMLTableSectionElement;
+      this.scriptsEmptyState = this.container.querySelector('#scriptsEmptyState') as HTMLElement;
+    }
   }
 
   private updateScriptsList(): void {

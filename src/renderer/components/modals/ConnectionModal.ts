@@ -73,10 +73,17 @@ export class ConnectionModal extends BaseComponent {
       this.handleSave();
     });
     
-    // Close modal when clicking outside
+    // Add visual feedback when clicking outside modal (shake animation)
     this.modal.addEventListener('click', (e) => {
       if (e.target === this.modal) {
-        this.hide();
+        // Shake the modal to indicate it won't close
+        const modalContent = this.modal.querySelector('.modal') as HTMLElement;
+        if (modalContent) {
+          modalContent.classList.add('modal-shake');
+          setTimeout(() => {
+            modalContent.classList.remove('modal-shake');
+          }, 500);
+        }
       }
     });
     
