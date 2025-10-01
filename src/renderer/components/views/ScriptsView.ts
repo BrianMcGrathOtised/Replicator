@@ -34,6 +34,10 @@ export class ScriptsView extends BaseComponent {
   }
 
   render(): void {
+    // Only render if component is initialized
+    if (!this.isInitialized) {
+      return;
+    }
     this.updateScriptsList();
   }
 
@@ -115,7 +119,10 @@ export class ScriptsView extends BaseComponent {
    */
   async loadSqlScripts(): Promise<void> {
     try {
-      this.showLoading('Loading scripts...');
+      // Only show loading if component is initialized
+      if (this.isInitialized) {
+        this.showLoading('Loading scripts...');
+      }
       
       const result = await window.electronAPI.scripts.getAll();
       if (!result.success) {
@@ -136,7 +143,10 @@ export class ScriptsView extends BaseComponent {
         // Emit event for other components
         eventBus.emit('scripts:loaded', this.sqlScripts);
         
-        this.render();
+        // Only render if component is initialized
+        if (this.isInitialized) {
+          this.render();
+        }
         console.log(`Loaded ${this.sqlScripts.length} SQL scripts from storage.json`);
       } else {
         throw new Error('Invalid scripts data structure');
@@ -145,7 +155,11 @@ export class ScriptsView extends BaseComponent {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`Failed to load scripts from storage.json: ${errorMessage}`);
       this.sqlScripts = [];
-      this.showError(`Failed to load scripts: ${errorMessage}`);
+      
+      // Only show error if component is initialized
+      if (this.isInitialized) {
+        this.showError(`Failed to load scripts: ${errorMessage}`);
+      }
     }
   }
 

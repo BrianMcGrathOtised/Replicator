@@ -88,6 +88,10 @@ export class DatabaseCompareView extends BaseComponent {
   }
 
   render(): void {
+    // Only render if component is initialized
+    if (!this.isInitialized) {
+      return;
+    }
     this.updateConnectionSelects();
   }
 
@@ -389,6 +393,10 @@ export class DatabaseCompareView extends BaseComponent {
    */
   updateConnections(connections: SavedConnection[]): void {
     this.connections = connections;
-    this.updateConnectionSelects();
+    
+    // Only update selects if component is initialized
+    if (this.isInitialized) {
+      this.updateConnectionSelects();
+    }
   }
 }

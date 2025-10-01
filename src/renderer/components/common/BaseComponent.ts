@@ -82,25 +82,37 @@ export abstract class BaseComponent {
   }
 
   /**
-   * Show loading state
+   * Show error state
    */
-  protected showLoading(message: string = 'Loading...'): void {
+  protected showError(message: string): void {
+    // Ensure component is initialized before trying to access container
+    if (!this.isInitialized) {
+      console.error(`Component not initialized when trying to show error: ${message}`);
+      return;
+    }
+    
     this.container.innerHTML = `
-      <div class="loading-state">
-        <div class="loading-spinner"></div>
+      <div class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h3>Error</h3>
         <p>${message}</p>
       </div>
     `;
   }
 
   /**
-   * Show error state
+   * Show loading state
    */
-  protected showError(message: string): void {
+  protected showLoading(message: string = 'Loading...'): void {
+    // Ensure component is initialized before trying to access container
+    if (!this.isInitialized) {
+      console.warn(`Component not initialized when trying to show loading: ${message}`);
+      return;
+    }
+    
     this.container.innerHTML = `
-      <div class="error-state">
-        <div class="error-icon">⚠️</div>
-        <h3>Error</h3>
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
         <p>${message}</p>
       </div>
     `;

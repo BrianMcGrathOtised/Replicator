@@ -102,6 +102,27 @@ export class App {
 
     // Clear logs handler
     this.clearLogsBtn.addEventListener('click', () => this.clearLogs());
+    
+    // Script modal event listeners
+    this.setupScriptModalListeners();
+  }
+
+  private setupScriptModalListeners(): void {
+    const closeBtn = document.getElementById('sqlScriptModalCloseBtn');
+    const cancelBtn = document.getElementById('sqlScriptModalCancelBtn');
+    const saveBtn = document.getElementById('sqlScriptModalSaveBtn');
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hideSqlScriptModal());
+    }
+    
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.hideSqlScriptModal());
+    }
+    
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.saveSqlScript());
+    }
   }
 
   private setupGlobalEventHandlers(): void {
@@ -264,9 +285,110 @@ export class App {
   }
 
   // Temporary methods for modals that haven't been extracted yet
-  private showSqlScriptModal(): void {
-    // TODO: Implement ScriptModal component
-    console.log('Show SQL Script Modal - not yet implemented');
+  private showSqlScriptModal(script?: SavedSqlScript): void {
+    const modal = document.getElementById('sqlScriptModal') as HTMLElement;
+    const titleElement = document.getElementById('sqlScriptModalTitle') as HTMLElement;
+    const nameInput = document.getElementById('sqlScriptName') as HTMLInputElement;
+    const contentInput = document.getElementById('sqlScriptContent') as HTMLTextAreaElement;
+    const descriptionInput = document.getElementById('sqlScriptDescription') as HTMLTextAreaElement;
+    
+    if (!modal || !titleElement || !nameInput || !contentInput || !descriptionInput) {
+      console.error('Script modal elements not found');
+      return;
+    }
+    
+    // Store the script ID being edited for later use
+    (modal as any).editingScriptId = script?.id || null;
+    
+    // Reset form
+    nameInput.value = '';
+    contentInput.value = '';
+    descriptionInput.value = '';
+    
+    if (script) {
+      // Edit mode
+      nameInput.value = script.name;
+      contentInput.value = script.content;
+      descriptionInput.value = script.description || '';
+      titleElement.textContent = 'Edit SQL Script';
+    } else {
+      // Add mode
+      titleElement.textContent = 'Add SQL Script';
+    }
+    
+    modal.style.display = 'flex';
+    nameInput.focus();
+  }
+
+  private hideSqlScriptModal(): void {
+    const modal = document.getElementById('sqlScriptModal') as HTMLElement;
+    if (modal) {
+      modal.style.display = 'none';
+      // Clear the editing script ID
+      (modal as any).editingScriptId = null;
+    }
+  }
+
+  private async saveSqlScript(): Promise<void> {
+    const modal = document.getElementById('sqlScriptModal') as HTMLElement;
+    const nameInput = document.getElementById('sqlScriptName') as HTMLInputElement;
+    const contentInput = document.getElementById('sqlScriptContent') as HTMLTextAreaElement;
+    const descriptionInput = document.getElementById('sqlScriptDescription') as HTMLTextAreaElement;
+    const saveBtn = document.getElementById('sqlScriptModalSaveBtn') as HTMLButtonElement;
+    
+    if (!modal || !nameInput || !contentInput || !descriptionInput || !saveBtn) {
+      console.error('Script modal elements not found');
+      return;
+    }
+    
+    const name = nameInput.value.trim();
+    const content = contentInput.value.trim();
+    const description = descriptionInput.value.trim();
+    
+    if (!name || !content) {
+      alert('Please fill in script name and content');
+      return;
+    }
+    
+    const editingScriptId = (modal as any).editingScriptId;
+    const isEditing = !!editingScriptId;
+    
+    saveBtn.disabled = true;
+    saveBtn.textContent = isEditing ? 'Updating...' : 'Saving...';
+    
+    try {
+      const scriptData = {
+        name,
+        content,
+        description: description || undefined
+      };
+      
+      let result;
+      if (isEditing) {
+        result = await window.electronAPI.scripts.update(editingScriptId, scriptData);
+      } else {
+        result = await window.electronAPI.scripts.create(scriptData);
+      }
+      
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      this.log(`Script "${name}" ${isEditing ? 'updated' : 'created'} successfully`);
+      
+      // Refresh scripts
+      await this.scriptsView.loadSqlScripts();
+      this.state.sqlScripts = this.scriptsView.getSqlScripts();
+      
+      this.hideSqlScriptModal();
+      
+    } catch (error) {
+      console.error(`Failed to ${isEditing ? 'update' : 'save'} script:`, error);
+      alert(`Failed to ${isEditing ? 'update' : 'save'} script: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEditing ? 'Update Script' : 'Save Script';
+    }
   }
 
   private showConfigModal(): void {
@@ -331,13 +453,56 @@ export class App {
   }
 
   public async editScript(scriptId: string): Promise<void> {
-    // TODO: Implement script editing
-    console.log('Edit script:', scriptId);
+    try {
+      const script = this.state.sqlScripts.find(s => s.id === scriptId);
+      if (!script) {
+        console.error('Script not found:', scriptId);
+        return;
+      }
+
+      // Fetch the full script details from the backend
+      const result = await window.electronAPI.scripts.get(scriptId);
+      if (!result.success) {
+        throw new Error(`Failed to fetch script details: ${result.error}`);
+      }
+
+      const fullScript: SavedSqlScript = {
+        id: script.id,
+        name: script.name,
+        content: result.data.content || '',
+        description: script.description || '',
+        createdAt: script.createdAt,
+        updatedAt: script.updatedAt
+      };
+
+      this.showSqlScriptModal(fullScript);
+    } catch (error) {
+      console.error('Failed to edit script:', error);
+      alert(`Failed to edit script: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   public async deleteScript(scriptId: string): Promise<void> {
-    // TODO: Implement script deletion
-    console.log('Delete script:', scriptId);
+    const script = this.state.sqlScripts.find(s => s.id === scriptId);
+    if (!script) return;
+
+    if (!confirm(`Are you sure you want to delete the script "${script.name}"?`)) return;
+
+    try {
+      const result = await window.electronAPI.scripts.delete(scriptId);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      this.log(`Script "${script.name}" deleted successfully`);
+      
+      // Refresh scripts
+      await this.scriptsView.loadSqlScripts();
+      this.state.sqlScripts = this.scriptsView.getSqlScripts();
+    } catch (error) {
+      console.error('Failed to delete script:', error);
+      alert(`Failed to delete script: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   public async runConfiguration(configId: string): Promise<void> {

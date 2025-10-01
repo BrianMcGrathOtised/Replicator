@@ -100,6 +100,11 @@ export class ConnectionModal extends BaseComponent {
    * Show modal for creating new connection
    */
   showForCreate(): void {
+    // Ensure modal is initialized before using
+    if (!this.isInitialized) {
+      this.show(); // This will initialize the modal
+    }
+    
     this.isEditing = false;
     this.currentConnection = null;
     this.modalTitle.textContent = 'Add Database Connection';
@@ -111,6 +116,11 @@ export class ConnectionModal extends BaseComponent {
    * Show modal for editing existing connection
    */
   showForEdit(connection: SavedConnection): void {
+    // Ensure modal is initialized before using
+    if (!this.isInitialized) {
+      this.show(); // This will initialize the modal
+    }
+    
     this.isEditing = true;
     this.currentConnection = connection;
     this.modalTitle.textContent = 'Edit Database Connection';
@@ -122,6 +132,11 @@ export class ConnectionModal extends BaseComponent {
    * Show modal for creating target connection
    */
   showForTarget(): void {
+    // Ensure modal is initialized before using
+    if (!this.isInitialized) {
+      this.show(); // This will initialize the modal
+    }
+    
     this.isEditing = false;
     this.currentConnection = null;
     this.modalTitle.textContent = 'Add Target Database Connection';
@@ -137,6 +152,12 @@ export class ConnectionModal extends BaseComponent {
   }
 
   show(): void {
+    // Ensure component is initialized first
+    if (!this.isInitialized) {
+      this.initialize();
+      this.isInitialized = true;
+    }
+    
     this.modal.style.display = 'flex';
     this.connectionName.focus();
   }

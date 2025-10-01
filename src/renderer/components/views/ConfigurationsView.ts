@@ -55,6 +55,10 @@ export class ConfigurationsView extends BaseComponent {
   }
 
   render(): void {
+    // Only render if component is initialized
+    if (!this.isInitialized) {
+      return;
+    }
     this.updateConfigurationsList();
   }
 
@@ -101,7 +105,10 @@ export class ConfigurationsView extends BaseComponent {
    */
   async loadConfigurations(): Promise<void> {
     try {
-      this.showLoading('Loading configurations...');
+      // Only show loading if component is initialized
+      if (this.isInitialized) {
+        this.showLoading('Loading configurations...');
+      }
       
       const result = await window.electronAPI.configs.getAll();
       if (!result.success) {
@@ -125,7 +132,10 @@ export class ConfigurationsView extends BaseComponent {
         // Emit event for other components
         eventBus.emit('configurations:loaded', this.configurations);
         
-        this.render();
+        // Only render if component is initialized
+        if (this.isInitialized) {
+          this.render();
+        }
         console.log(`Loaded ${this.configurations.length} configurations from storage.json`);
       } else {
         throw new Error('Invalid configurations data structure');
@@ -134,7 +144,11 @@ export class ConfigurationsView extends BaseComponent {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`Failed to load configurations from storage.json: ${errorMessage}`);
       this.configurations = [];
-      this.showError(`Failed to load configurations: ${errorMessage}`);
+      
+      // Only show error if component is initialized
+      if (this.isInitialized) {
+        this.showError(`Failed to load configurations: ${errorMessage}`);
+      }
     }
   }
 

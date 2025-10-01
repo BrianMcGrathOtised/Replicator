@@ -34,6 +34,10 @@ export class DatabasesView extends BaseComponent {
   }
 
   render(): void {
+    // Only render if component is initialized
+    if (!this.isInitialized) {
+      return;
+    }
     this.updateConnectionsList();
   }
 
@@ -117,7 +121,10 @@ export class DatabasesView extends BaseComponent {
    */
   async loadConnections(): Promise<void> {
     try {
-      this.showLoading('Loading connections...');
+      // Only show loading if component is initialized
+      if (this.isInitialized) {
+        this.showLoading('Loading connections...');
+      }
       
       const result = await window.electronAPI.connections.getAll();
       if (!result.success) {
@@ -141,7 +148,10 @@ export class DatabasesView extends BaseComponent {
         // Emit event for other components
         eventBus.emit('connections:loaded', this.connections);
         
-        this.render();
+        // Only render if component is initialized
+        if (this.isInitialized) {
+          this.render();
+        }
         console.log(`Loaded ${this.connections.length} connections from storage.json`);
       } else {
         throw new Error('Invalid connections data structure');
@@ -150,7 +160,11 @@ export class DatabasesView extends BaseComponent {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`Failed to load connections from storage.json: ${errorMessage}`);
       this.connections = [];
-      this.showError(`Failed to load connections: ${errorMessage}`);
+      
+      // Only show error if component is initialized
+      if (this.isInitialized) {
+        this.showError(`Failed to load connections: ${errorMessage}`);
+      }
     }
   }
 
