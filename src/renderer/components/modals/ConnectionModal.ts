@@ -179,6 +179,50 @@ export class ConnectionModal extends BaseComponent {
     this.onServerTypeChange(); // Update placeholders
   }
 
+  private parseConnectionString(connectionString: string): {
+    server?: string;
+    username?: string;
+    password?: string;
+    database?: string;
+    port?: number;
+  } {
+    const parts: any = {};
+    
+    // Extract server (handle both regular and Azure SQL formats)
+    const serverMatch = connectionString.match(/Server=(?:tcp:)?([^;]+)/i);
+    if (serverMatch) parts.server = serverMatch[1];
+    
+    // Extract database
+    const databaseMatch = connectionString.match(/(?:Database|Initial Catalog)=([^;]+)/i);
+    if (databaseMatch) parts.database = databaseMatch[1];
+    
+    // Extract username
+    const userMatch = connectionString.match(/(?:User ID|UID)=([^;]+)/i);
+    if (userMatch) parts.username = userMatch[1];
+    
+    // Extract password
+    const passwordMatch = connectionString.match(/(?:Password|PWD)=([^;]+)/i);
+    if (passwordMatch) parts.password = passwordMatch[1];
+    
+    // Extract port (if specified)
+    if (parts.server && parts.server.includes(',')) {
+      const [server, port] = parts.server.split(',');
+      parts.server = server;
+      parts.port = parseInt(port);
+    } else if (parts.server && parts.server.includes(':')) {
+      const [server, port] = parts.server.split(':');
+      parts.server = server;
+      parts.port = parseInt(port);
+    }
+    
+    // Handle Azure SQL format with tcp: prefix
+    if (parts.server && parts.server.startsWith('tcp:')) {
+      parts.server = parts.server.replace('tcp:', '');
+    }
+    
+    return parts;
+  }
+
   private populateForm(connection: SavedConnection): void {
     this.connectionName.value = connection.name;
     this.database.value = connection.databaseName;
@@ -186,7 +230,39 @@ export class ConnectionModal extends BaseComponent {
     this.isTargetDatabase.checked = connection.isTargetDatabase;
     this.serverType.value = connection.isAzure ? 'azure-sql' : 'sqlserver';
     
-    // Note: We don't populate server, username, password, port as they need to be fetched from the backend
+    // Check if we have decrypted fields from the server
+    const decryptedFields = (this as any).decryptedFields;
+    if (decryptedFields) {
+      // Use the decrypted fields directly
+      if (decryptedFields.server) {
+        this.server.value = decryptedFields.server;
+      }
+      if (decryptedFields.username) {
+        this.username.value = decryptedFields.username;
+      }
+      if (decryptedFields.password) {
+        this.password.value = decryptedFields.password;
+      }
+      if (decryptedFields.port) {
+        this.port.value = decryptedFields.port.toString();
+      }
+    } else if (connection.connectionString) {
+      // Fallback: Parse connection string if no decrypted fields available
+      const parsedConnection = this.parseConnectionString(connection.connectionString);
+      if (parsedConnection.server) {
+        this.server.value = parsedConnection.server;
+      }
+      if (parsedConnection.username) {
+        this.username.value = parsedConnection.username;
+      }
+      if (parsedConnection.password) {
+        this.password.value = parsedConnection.password;
+      }
+      if (parsedConnection.port) {
+        this.port.value = parsedConnection.port.toString();
+      }
+    }
+    
     this.onServerTypeChange();
   }
 

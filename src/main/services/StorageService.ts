@@ -29,6 +29,10 @@ export class StorageService {
     this.data = this.loadData();
   }
 
+  getStoragePath(): string {
+    return this.dataFilePath;
+  }
+
   private loadData(): StorageData {
     try {
       // Ensure data directory exists
@@ -193,6 +197,7 @@ export class StorageService {
         serverType: request.serverType,
         server: request.server,
         username: request.username,
+        password: request.password,
         database: request.database,
         ...(request.port && { port: request.port }),
         ...(request.isTargetDatabase !== undefined && { isTargetDatabase: request.isTargetDatabase }),
@@ -212,6 +217,7 @@ export class StorageService {
         // Decrypt connection fields
         const decryptedServer = encryptionService.decrypt(conn.server);
         const decryptedUsername = encryptionService.decrypt(conn.username);
+        const decryptedPassword = encryptionService.decrypt(conn.password);
         const decryptedDatabase = encryptionService.decrypt(conn.database);
         
         return {
@@ -221,6 +227,7 @@ export class StorageService {
           serverType: conn.serverType,
           server: decryptedServer,
           username: decryptedUsername,
+          password: decryptedPassword,
           database: decryptedDatabase,
           ...(conn.port && { port: conn.port }),
           ...(conn.isTargetDatabase !== undefined && { isTargetDatabase: conn.isTargetDatabase }),
@@ -245,6 +252,7 @@ export class StorageService {
     try {
       const decryptedServer = encryptionService.decrypt(connection.server);
       const decryptedUsername = encryptionService.decrypt(connection.username);
+      const decryptedPassword = encryptionService.decrypt(connection.password);
       const decryptedDatabase = encryptionService.decrypt(connection.database);
       
       return {
@@ -254,6 +262,7 @@ export class StorageService {
         serverType: connection.serverType,
         server: decryptedServer,
         username: decryptedUsername,
+        password: decryptedPassword,
         database: decryptedDatabase,
         ...(connection.port && { port: connection.port }),
         ...(connection.isTargetDatabase !== undefined && { isTargetDatabase: connection.isTargetDatabase }),
@@ -326,6 +335,7 @@ export class StorageService {
       // Get updated connection info
       const decryptedServer = encryptionService.decrypt(connection.server);
       const decryptedUsername = encryptionService.decrypt(connection.username);
+      const decryptedPassword = encryptionService.decrypt(connection.password);
       const decryptedDatabase = encryptionService.decrypt(connection.database);
       
       logger.info('Connection updated', { id, name: connection.name });
@@ -337,6 +347,7 @@ export class StorageService {
         serverType: connection.serverType,
         server: decryptedServer,
         username: decryptedUsername,
+        password: decryptedPassword,
         database: decryptedDatabase,
         ...(connection.port && { port: connection.port }),
         ...(connection.isTargetDatabase !== undefined && { isTargetDatabase: connection.isTargetDatabase }),

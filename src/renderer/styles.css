@@ -203,6 +203,16 @@ body {
   margin-right: 0.75rem;
   min-width: 24px;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon svg {
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+  transition: color 0.2s ease;
 }
 
 .nav-text {
@@ -1136,6 +1146,11 @@ body {
   .nav-icon {
     font-size: 1.1rem;
     margin-right: 0.5rem;
+  }
+  
+  .nav-icon svg {
+    width: 18px;
+    height: 18px;
   }
   
   .view {

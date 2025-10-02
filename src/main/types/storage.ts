@@ -74,6 +74,7 @@ export interface ConnectionInfo {
   serverType: 'sqlserver' | 'azure-sql';
   server: string;
   username: string;
+  password: string;
   database: string;
   port?: number;
   isTargetDatabase?: boolean;

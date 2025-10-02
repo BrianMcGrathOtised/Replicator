@@ -1,5 +1,6 @@
 {
   "name": "local-data-replicator",
+  "author": "Brian McGrath",
   "version": "2.0.0",
   "description": "Simplified Electron application for replicating MS SQL Server and Azure SQL databases locally",
   "main": "dist/main/index.js",
@@ -16,8 +17,10 @@
     "electron:dev": "wait-on dist/main/index.js && electron .",
     "electron:pack": "electron-builder",
     "electron:dist": "npm run build && electron-builder",
-    "package": "npm run electron:dist",
-    "clean": "rimraf dist"
+    "package": "electron-forge package",
+    "clean": "rimraf dist",
+    "start": "electron-forge start",
+    "make": "electron-forge make"
   },
   "build": {
     "appId": "com.datareplicator.app",
@@ -41,25 +44,33 @@
     }
   },
   "dependencies": {
+    "dotenv": "^16.3.1",
     "electron-is-dev": "^3.0.1",
     "electron-log": "^5.0.1",
+    "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.1.7",
     "mssql": "^10.0.1",
     "sqlite3": "^5.1.6",
-    "dotenv": "^16.3.1",
-    "winston": "^3.11.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@electron-forge/cli": "^7.9.0",
+    "@electron-forge/maker-deb": "^7.9.0",
+    "@electron-forge/maker-rpm": "^7.9.0",
+    "@electron-forge/maker-squirrel": "^7.9.0",
+    "@electron-forge/maker-zip": "^7.9.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.9.0",
+    "@electron-forge/plugin-fuses": "^7.9.0",
+    "@electron/fuses": "^1.8.0",
     "@types/mssql": "^9.1.4",
+    "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
     "concurrently": "^8.2.2",
     "css-loader": "^6.8.1",
     "electron": "^27.1.3",
-    "electron-builder": "^24.8.1",
     "eslint": "^8.54.0",
     "html-webpack-plugin": "^5.5.3",
     "mini-css-extract-plugin": "^2.7.6",
@@ -72,4 +83,4 @@
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
   }
-} 
+}

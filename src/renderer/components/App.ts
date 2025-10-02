@@ -433,16 +433,25 @@ export class App {
         throw new Error(`Failed to fetch connection details: ${result.error}`);
       }
 
+      // Create a SavedConnection object with the decrypted data
       const fullConnection: SavedConnection = {
         id: connection.id,
-        name: connection.name,
-        connectionString: result.data.connectionString || '',
-        description: connection.description || '',
-        isAzure: connection.isAzure,
-        isTargetDatabase: connection.isTargetDatabase,
-        databaseName: connection.databaseName,
-        createdAt: connection.createdAt,
-        updatedAt: connection.updatedAt
+        name: result.data.name,
+        connectionString: '', // Will be built from individual fields
+        description: result.data.description || '',
+        isAzure: result.data.serverType === 'azure-sql',
+        isTargetDatabase: result.data.isTargetDatabase || false,
+        databaseName: result.data.database,
+        createdAt: result.data.createdAt,
+        updatedAt: result.data.updatedAt
+      };
+
+      // Store the individual decrypted fields for the modal to use
+      (this.connectionModal as any).decryptedFields = {
+        server: result.data.server,
+        username: result.data.username,
+        password: result.data.password,
+        port: result.data.port
       };
 
       this.connectionModal.showForEdit(fullConnection);

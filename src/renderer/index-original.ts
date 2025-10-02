@@ -14,6 +14,7 @@ declare global {
         version: string;
         electronVersion: string;
         nodeVersion: string;
+        storagePath: string;
       }>;
       connections: {
         getAll: () => Promise<any>;

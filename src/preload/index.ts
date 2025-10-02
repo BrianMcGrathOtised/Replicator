@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 // Define the API that will be exposed to the renderer process
-interface ElectronAPI {
+export interface ElectronAPI {
   // File system operations
   selectFile: () => Promise<string | null>;
   selectDirectory: () => Promise<string | null>;
@@ -15,6 +15,7 @@ interface ElectronAPI {
     version: string;
     electronVersion: string;
     nodeVersion: string;
+    storagePath: string;
   }>;
   
   // Connection management
