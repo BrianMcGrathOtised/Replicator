@@ -1,3 +1,5 @@
+const { Packager } = require("electron-builder");
+
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
