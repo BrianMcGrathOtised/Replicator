@@ -19,6 +19,7 @@ export class SettingsView extends BaseComponent {
   
   // App info elements
   private appVersion!: HTMLElement;
+  private storagePath!: HTMLElement;
 
   constructor() {
     super('settings-view');
@@ -42,6 +43,7 @@ export class SettingsView extends BaseComponent {
     
     // Get app info elements
     this.appVersion = this.container.querySelector('#appVersion') as HTMLElement;
+    this.storagePath = this.container.querySelector('#storagePath') as HTMLElement;
 
     this.setupEventListeners();
     this.loadAppInfo();
@@ -176,9 +178,11 @@ export class SettingsView extends BaseComponent {
     try {
       const appInfo = await window.electronAPI.getAppInfo();
       this.appVersion.textContent = appInfo.version;
+      this.storagePath.textContent = appInfo.storagePath;
     } catch (error) {
       console.error('Failed to load app info:', error);
       this.appVersion.textContent = 'Unknown';
+      this.storagePath.textContent = 'Unknown';
     }
   }
 

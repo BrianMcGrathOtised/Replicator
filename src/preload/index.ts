@@ -15,6 +15,7 @@ interface ElectronAPI {
     version: string;
     electronVersion: string;
     nodeVersion: string;
+    storagePath: string;
   }>;
   
   // Connection management

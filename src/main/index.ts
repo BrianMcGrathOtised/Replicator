@@ -158,7 +158,8 @@ class DataReplicatorApp {
         name: app.getName(),
         version: app.getVersion(),
         electronVersion: process.versions.electron,
-        nodeVersion: process.versions.node
+        nodeVersion: process.versions.node,
+        storagePath: storageService.getStoragePath()
       };
     });
 
